@@ -1,0 +1,103 @@
+You are my pair-programmer. Build a minimal, working MVP for an AI-first “My Day” assistant as a single Replit project with:
+
+ARCHITECTURE
+- Monorepo: 
+  - /server (Node + Express + TypeScript)
+  - /web (React + Vite + TypeScript + Tailwind)
+- SQLite for storage (Prisma ORM).
+- Env via .env.
+- Single “npm run dev” to start both with concurrently; “npm run build && npm run start” for prod (serve /web build from /server).
+
+CORE FEATURES (MVP)
+1) Calendar ingest (read-only):
+   - Fetch events from a Google Calendar *secret iCal URL* (no OAuth).
+   - Server cron (node-cron) pulls and caches events every 15 min.
+   - Parse with node-ical. Normalize to {id, title, start, end, location, description, isAllDay}.
+
+2) Tasks:
+   - Prisma models:
+     - Task { id, title, source ('manual'|'slack'|'ai'), status ('pending'|'confirmed'|'done'), priority INT, dueAt DATETIME | null, estimateMins INT | null, url TEXT | null, context JSON, aiSuggested BOOLEAN, createdAt, updatedAt }
+     - FocusBlock { id, taskId FK, start DATETIME, end DATETIME, confirmed BOOLEAN }
+   - REST endpoints: 
+     - GET /api/tasks
+     - POST /api/tasks (create)
+     - PATCH /api/tasks/:id (update status/confirm/done)
+     - POST /api/ingest/slack (stub endpoint: accept JSON { text, url?, ts? } -> extract naive title + create Task with source='slack', aiSuggested=true). No Slack OAuth yet.
+
+3) “What am I doing today?” endpoint:
+   - GET /api/agenda?date=YYYY-MM-DD -> returns:
+     {
+       meetings: [normalized events for that day],
+       freeBlocks: [{start, end}],
+       topTasks: top 5 tasks (pending + due soon or high priority),
+       suggestions: schedule suggestions (see #4) marked AI-only (no writes)
+     }
+
+4) Simple scheduler (server-side):
+   - Greedy fill freeBlocks with topTasks (estimateMins or default 30m), respecting existing meetings.
+   - Return “suggestions” array with proposed FocusBlocks but DO NOT persist unless confirmed.
+
+5) OpenAI hook (keep optional, behind env OPENAI_API_KEY):
+   - POST /api/chat { message }:
+     - If message matches intent “what am I doing today”, call agenda and return a structured natural-language summary.
+     - Otherwise echo stub. Leave room for future LLM parsing of Slack text -> tasks.
+
+WEB UI (/web)
+- React + Vite + Tailwind. Use FullCalendar for the calendar.
+- Three panes (responsive):
+  a) Chat dock (right drawer): input box calling /api/chat and showing responses.
+  b) Calendar center: FullCalendar Day/Week view showing:
+     - Confirmed meetings (solid color).
+     - AI-suggested focus blocks (semi-transparent + dashed border + “AI” pill).
+  c) Tasks left panel:
+     - Sections: “Unconfirmed (AI)”, “My Tasks”, “Done”.
+     - Each task shows title, due chip, source icon (Slack/manual/AI).
+     - Buttons: [Confirm] -> status='confirmed', aiSuggested=false and creates FocusBlock; [Done] -> status='done'.
+- Toolbar buttons: “Today’s Plan” (calls /api/agenda for today), “Add Task”.
+
+SETUP & SCRIPTS
+- /server:
+  - Dependencies: express, zod, dotenv, node-ical, node-cron, prisma, @prisma/client, openai (optional), cors
+  - Scripts: dev (ts-node-dev), build (tsc), start (node dist/index.js)
+- /web:
+  - Dependencies: react, react-dom, vite, tailwindcss, @fullcalendar/core, @fullcalendar/timegrid, @fullcalendar/daygrid, @tanstack/react-query, axios
+  - Scripts: dev, build
+- Root:
+  - concurrently to run both.
+  - “npm run dev” -> web on 5173, server on 3000.
+  - For prod: server serves /web/dist as static.
+
+ENV & CONFIG
+- .env (root or /server):
+  - ICS_URL="https://calendar.google.com/calendar/ical/.../basic.ics"
+  - OPENAI_API_KEY="" (optional)
+  - PORT=3000
+- If ICS_URL missing, seed with a few fake meetings so UI renders.
+- Prisma schema for Task/FocusBlock; run migrations on first boot.
+
+UX DETAILS
+- Clear visual distinction:
+  - Meetings = solid.
+  - AI suggestions = dashed border + “AI” badge.
+  - Confirm action moves suggestion to confirmed FocusBlock (solid fill).
+- Agenda summary format:
+  - Header: “Today”
+  - Meetings with time + Zoom link if found in description.
+  - Then “Open time” blocks.
+  - Then “Recommended focus” with top 3 tasks and proposed times.
+
+QUALITY
+- Zod validate inputs.
+- Basic error handling & loading states.
+- Seed script to create sample tasks.
+
+DELIVERABLES
+- Full working code for /server and /web with the above.
+- README with quick start:
+  1) Put ICS_URL in /server/.env
+  2) npm install (root)
+  3) npx prisma migrate dev
+  4) npm run dev
+- Brief notes where to plug Slack OAuth and real LLM task extraction later.
+
+Now generate the project.
