@@ -47,10 +47,10 @@ export default function AddTaskModal({ onClose }: AddTaskModalProps) {
 
     createTaskMutation.mutate({
       title: formData.title,
-      source: 'manual',
-      status: 'pending',
+      source: 'manual' as const,
+      status: 'pending' as const,
       priority: formData.priority,
-      estimateMins: formData.estimateMins,
+      estimateMins: formData.estimateMins || null,
       dueAt: formData.dueAt ? new Date(formData.dueAt) : null,
       context: formData.context ? { note: formData.context } : null,
       aiSuggested: false,

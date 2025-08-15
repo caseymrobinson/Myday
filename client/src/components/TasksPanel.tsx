@@ -11,10 +11,11 @@ interface TasksPanelProps {
   tasks: Task[];
   isLoading: boolean;
   onAddTask: () => void;
+  onSetupCalendar: () => void;
   onGetTodaysPlan: () => void;
 }
 
-export default function TasksPanel({ tasks, isLoading, onAddTask, onGetTodaysPlan }: TasksPanelProps) {
+export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalendar, onGetTodaysPlan }: TasksPanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -105,15 +106,26 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onGetTodaysPla
             Add Task
           </Button>
         </div>
-        <Button 
-          onClick={onGetTodaysPlan}
-          className="w-full bg-amber-500 text-white hover:bg-amber-600 text-sm"
-          size="sm"
-          data-testid="button-todays-plan"
-        >
-          <CalendarDays className="h-4 w-4 mr-1" />
-          Today's Plan
-        </Button>
+        <div className="flex space-x-2">
+          <Button 
+            onClick={onGetTodaysPlan}
+            className="flex-1 bg-amber-500 text-white hover:bg-amber-600 text-sm"
+            size="sm"
+            data-testid="button-todays-plan"
+          >
+            <CalendarDays className="h-4 w-4 mr-1" />
+            Today's Plan
+          </Button>
+          <Button 
+            onClick={onSetupCalendar}
+            variant="outline"
+            className="text-sm border-blue-200 text-blue-700 hover:bg-blue-50"
+            size="sm"
+            data-testid="button-setup-calendar"
+          >
+            <CalendarDays className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Tasks List */}

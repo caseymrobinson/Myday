@@ -4,11 +4,13 @@ import TasksPanel from "@/components/TasksPanel";
 import CalendarPanel from "@/components/CalendarPanel";
 import ChatPanel from "@/components/ChatPanel";
 import AddTaskModal from "@/components/AddTaskModal";
+import CalendarSetupModal from "@/components/CalendarSetupModal";
 import { api } from "@/lib/api";
 
 export default function Dashboard() {
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+  const [isCalendarSetupOpen, setIsCalendarSetupOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   const { data: tasks, isLoading: tasksLoading } = useQuery({
@@ -28,6 +30,7 @@ export default function Dashboard() {
         tasks={tasks || []}
         isLoading={tasksLoading}
         onAddTask={() => setIsAddTaskModalOpen(true)}
+        onSetupCalendar={() => setIsCalendarSetupOpen(true)}
         onGetTodaysPlan={() => {
           // This will trigger agenda refetch
           setSelectedDate(new Date().toISOString().split('T')[0]);
@@ -54,6 +57,13 @@ export default function Dashboard() {
       {isAddTaskModalOpen && (
         <AddTaskModal 
           onClose={() => setIsAddTaskModalOpen(false)}
+        />
+      )}
+
+      {/* Calendar Setup Modal */}
+      {isCalendarSetupOpen && (
+        <CalendarSetupModal 
+          onClose={() => setIsCalendarSetupOpen(false)}
         />
       )}
     </div>

@@ -38,7 +38,7 @@ export class OpenAIService {
             content: message
           }
         ],
-        max_tokens: 500
+        max_completion_tokens: 500
       });
 
       return response.choices[0].message.content || "I couldn't process your request. Please try again.";
@@ -139,7 +139,7 @@ Keep it concise but comprehensive.`;
             content: prompt
           }
         ],
-        max_tokens: 600
+        max_completion_tokens: 600
       });
 
       return response.choices[0].message.content || "I couldn't generate your agenda summary.";
@@ -173,7 +173,7 @@ Keep it concise but comprehensive.`;
           }
         ],
         response_format: { type: "json_object" },
-        max_tokens: 300
+        max_completion_tokens: 300
       });
 
       const result = JSON.parse(response.choices[0].message.content || "{}");
