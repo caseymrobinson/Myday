@@ -22,6 +22,12 @@ export class CalendarService {
     this.startCronJob();
   }
 
+  setIcsUrl(url: string) {
+    this.icsUrl = url;
+    // Trigger immediate sync after setting URL
+    this.syncCalendar();
+  }
+
   private startCronJob() {
     // Run every 15 minutes
     cron.schedule("*/15 * * * *", async () => {
@@ -44,7 +50,7 @@ export class CalendarService {
     
     try {
       console.log(`Fetching calendar from: ${this.icsUrl}`);
-      const events = await ical.async.fromURL(this.icsUrl);
+      const events = await ical.fromURL(this.icsUrl);
       
       // Clear existing events
       await storage.clearCalendarEvents();

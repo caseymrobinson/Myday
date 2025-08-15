@@ -34,15 +34,28 @@ export default function CalendarSetupModal({ onClose }: CalendarSetupModalProps)
     }
   });
 
+  const setupCalendarMutation = useMutation({
+    mutationFn: (url: string) => api.setupCalendar(url),
+    onSuccess: () => {
+      toast({ title: "Calendar setup successful!" });
+      onClose();
+    },
+    onError: () => {
+      toast({ 
+        title: "Failed to setup calendar", 
+        description: "Please check your iCal URL and try again.",
+        variant: "destructive" 
+      });
+    }
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!icsUrl.trim()) return;
 
     setIsLoading(true);
     try {
-      // This would need to be implemented on the backend to set the ICS_URL
-      // For now, we'll just trigger a sync to test the URL
-      await syncCalendarMutation.mutateAsync();
+      await setupCalendarMutation.mutateAsync(icsUrl);
     } finally {
       setIsLoading(false);
     }

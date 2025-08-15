@@ -42,8 +42,19 @@ export class OpenAIService {
       });
 
       return response.choices[0].message.content || "I couldn't process your request. Please try again.";
-    } catch (error) {
+    } catch (error: any) {
       console.error("OpenAI API error:", error);
+      
+      // Check if it's an API key issue
+      if (error.code === 'invalid_api_key' || error.status === 401) {
+        return "OpenAI API key is invalid or missing. Please check your API key configuration.";
+      }
+      
+      // Check if it's a model issue
+      if (error.message && error.message.includes('model')) {
+        return "There's an issue with the AI model configuration. Please try again later.";
+      }
+      
       return "I'm having trouble processing your request right now. Please try again later.";
     }
   }
@@ -143,9 +154,15 @@ Keep it concise but comprehensive.`;
       });
 
       return response.choices[0].message.content || "I couldn't generate your agenda summary.";
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating agenda summary:", error);
-      return "I couldn't generate your agenda summary right now. Please try again.";
+      
+      // Check if it's an API key issue
+      if (error.code === 'invalid_api_key' || error.status === 401) {
+        return "OpenAI API key is invalid or missing. Please check your API key configuration.";
+      }
+      
+      return "I'm having trouble generating your agenda summary. Please try again later.";
     }
   }
 

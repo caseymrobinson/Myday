@@ -20,7 +20,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tasks", async (req, res) => {
     try {
-      const validatedData = insertTaskSchema.parse(req.body);
+      // Convert date string to Date object if present
+      const taskData = {
+        ...req.body,
+        dueAt: req.body.dueAt ? new Date(req.body.dueAt) : null
+      };
+      
+      const validatedData = insertTaskSchema.parse(taskData);
       const task = await storage.createTask(validatedData);
       res.status(201).json(task);
     } catch (error) {
@@ -212,6 +218,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Calendar sync completed" });
     } catch (error) {
       res.status(500).json({ message: "Calendar sync failed" });
+    }
+  });
+
+  // Calendar setup endpoint - save ICS URL
+  app.post("/api/calendar/setup", async (req, res) => {
+    try {
+      const { icsUrl } = req.body;
+      if (!icsUrl || !icsUrl.includes('ical')) {
+        res.status(400).json({ message: "Invalid iCal URL" });
+        return;
+      }
+      
+      // Update the calendar service with the new URL
+      calendarService.setIcsUrl(icsUrl);
+      
+      // Trigger immediate sync
+      await calendarService.syncCalendar();
+      
+      res.json({ message: "Calendar setup successful" });
+    } catch (error) {
+      console.error("Calendar setup error:", error);
+      res.status(500).json({ message: "Failed to setup calendar" });
     }
   });
 
