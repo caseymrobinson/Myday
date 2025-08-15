@@ -27,7 +27,7 @@ export class OpenAIService {
 
       // Generic conversation
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5-nano",
         messages: [
           {
             role: "system",
@@ -128,7 +128,7 @@ Format the response as a friendly, conversational summary that includes:
 Keep it concise but comprehensive.`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5-nano",
         messages: [
           {
             role: "system",
@@ -152,7 +152,7 @@ Keep it concise but comprehensive.`;
   private async extractTaskFromText(message: string): Promise<string> {
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5-nano",
         messages: [
           {
             role: "system",
