@@ -46,7 +46,10 @@ export default function CalendarPanel({
   });
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    // Parse the date string and create a date in local time
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    
     return {
       full: date.toLocaleDateString('en-US', { 
         weekday: 'long', 
@@ -213,22 +216,27 @@ export default function CalendarPanel({
               {agenda?.meetings.map(meeting => (
                 <div
                   key={meeting.id}
-                  className="absolute left-2 right-2 bg-gradient-to-br from-green-200 to-green-300 border border-green-400 rounded-lg p-2 text-sm"
+                  className="absolute left-2 right-2 bg-gradient-to-br from-green-200 to-green-300 border border-green-400 rounded-lg p-2 text-sm overflow-hidden"
                   style={getEventStyle(meeting.start, meeting.end)}
                   data-testid={`event-meeting-${meeting.id}`}
                 >
-                  <div className="font-medium text-gray-800">{meeting.title}</div>
+                  <div className="font-medium text-gray-800 truncate">{meeting.title}</div>
                   <div className="text-xs text-gray-600">
                     {formatTime(meeting.start)} - {formatTime(meeting.end)}
                   </div>
                   {meeting.location && (
-                    <div className="text-xs text-gray-600 flex items-center mt-1">
+                    <div className="text-xs text-gray-600 flex items-center mt-1 truncate">
                       {meeting.location.includes('Zoom') || meeting.location.includes('zoom') ? (
-                        <Video className="h-3 w-3 mr-1" />
+                        <Video className="h-3 w-3 mr-1 flex-shrink-0" />
                       ) : (
-                        <MapPin className="h-3 w-3 mr-1" />
+                        <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
                       )}
-                      {meeting.location}
+                      <span className="truncate">{meeting.location}</span>
+                    </div>
+                  )}
+                  {meeting.description && (
+                    <div className="text-xs text-gray-500 mt-1 truncate" title={meeting.description}>
+                      {meeting.description}
                     </div>
                   )}
                 </div>

@@ -27,7 +27,7 @@ export class OpenAIService {
 
       // Generic conversation
       const response = await openai.chat.completions.create({
-        model: "gpt-5-nano",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -38,7 +38,7 @@ export class OpenAIService {
             content: message
           }
         ],
-        max_completion_tokens: 500
+        max_tokens: 500
       });
 
       return response.choices[0].message.content || "I couldn't process your request. Please try again.";
@@ -139,7 +139,7 @@ Format the response as a friendly, conversational summary that includes:
 Keep it concise but comprehensive.`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5-nano",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -150,7 +150,7 @@ Keep it concise but comprehensive.`;
             content: prompt
           }
         ],
-        max_completion_tokens: 600
+        max_tokens: 600
       });
 
       return response.choices[0].message.content || "I couldn't generate your agenda summary.";
@@ -169,7 +169,7 @@ Keep it concise but comprehensive.`;
   private async extractTaskFromText(message: string): Promise<string> {
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-5-nano",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -190,7 +190,7 @@ Keep it concise but comprehensive.`;
           }
         ],
         response_format: { type: "json_object" },
-        max_completion_tokens: 300
+        max_tokens: 300
       });
 
       const result = JSON.parse(response.choices[0].message.content || "{}");
