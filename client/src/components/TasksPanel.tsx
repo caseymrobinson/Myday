@@ -147,7 +147,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
         </Button>
       </div>
       {/* Tasks Container */}
-      <div className="flex-1 overflow-y-auto px-6 bg-[#292929]">
+      <div className="flex-1 overflow-y-auto px-6 bg-[#1E1E1E]">
         {isLoading ? (
           <div className="flex items-center justify-center h-32">
             <div className="text-gray-500">Loading tasks...</div>
