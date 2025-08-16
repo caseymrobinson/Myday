@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import type { CalendarEvent, FocusBlock } from "../types";
-import { Bot, MoreVertical, ChevronLeft, ChevronRight, Send } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Send } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -288,13 +288,6 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                 data-testid="button-open-chat-panel"
               >
                 <Bot className="h-5 w-5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 text-gray-400 hover:text-white"
-              >
-                <MoreVertical className="h-4 w-4" />
               </Button>
             </div>
           </div>
