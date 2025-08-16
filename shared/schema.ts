@@ -75,6 +75,14 @@ export const agendaResponseSchema = z.object({
     start: z.string(),
     end: z.string()
   })),
+  focusBlocks: z.array(z.object({
+    id: z.string(),
+    taskId: z.string(),
+    taskTitle: z.string(),
+    start: z.string(),
+    end: z.string(),
+    confirmed: z.boolean()
+  })),
   topTasks: z.array(z.object({
     id: z.string(),
     title: z.string(),

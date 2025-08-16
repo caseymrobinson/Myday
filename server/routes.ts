@@ -83,6 +83,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get free time blocks
       const freeBlocks = await schedulerService.getFreeTimeSlots(date);
       
+      // Get focus blocks for this date
+      const allFocusBlocks = await storage.getFocusBlocks();
+      const focusBlocks = allFocusBlocks.filter(block => {
+        const blockDate = new Date(block.start).toISOString().split('T')[0];
+        return blockDate === date;
+      });
+      
       // Get top priority tasks
       const allTasks = await storage.getTasks();
       const topTasks = allTasks
@@ -116,9 +123,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return acc;
       }, []);
       
+      // Map focus blocks to include task details
+      const focusBlocksWithTasks = await Promise.all(
+        focusBlocks.map(async (block) => {
+          const task = await storage.getTask(block.taskId);
+          return {
+            id: block.id,
+            taskId: block.taskId,
+            taskTitle: task?.title || 'Unknown Task',
+            start: block.start.toISOString(),
+            end: block.end.toISOString(),
+            confirmed: block.confirmed
+          };
+        })
+      );
+
       const agendaResponse: AgendaResponse = {
         meetings,
         freeBlocks,
+        focusBlocks: focusBlocksWithTasks,
         topTasks,
         suggestions: uniqueSuggestions
       };

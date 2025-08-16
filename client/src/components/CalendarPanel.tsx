@@ -154,10 +154,13 @@ export default function CalendarPanel({
   };
 
   const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString([], { 
+    // Create date and ensure consistent timezone handling
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString([], { 
       hour: 'numeric', 
       minute: '2-digit',
-      hour12: true  // 12-hour format with AM/PM
+      hour12: true,  // 12-hour format with AM/PM
+      timeZone: 'America/New_York' // Ensure consistent timezone
     });
   };
 
@@ -319,6 +322,24 @@ export default function CalendarPanel({
                 </div>
               ))}
               
+              {/* Focus Blocks */}
+              {agenda?.focusBlocks.map(focusBlock => (
+                <div
+                  key={focusBlock.id}
+                  className="absolute left-2 right-2 bg-gradient-to-br from-blue-200 to-blue-300 border border-blue-400 rounded-lg p-2 text-sm overflow-hidden"
+                  style={getEventStyle(focusBlock.start, focusBlock.end)}
+                  data-testid={`event-focus-block-${focusBlock.id}`}
+                >
+                  <div className="font-medium text-gray-800 truncate">{focusBlock.taskTitle}</div>
+                  <div className="text-xs text-gray-600">
+                    {formatTime(focusBlock.start)} - {formatTime(focusBlock.end)}
+                  </div>
+                  <div className="text-xs text-blue-700 font-medium mt-1">
+                    Focus Block {focusBlock.confirmed ? '(Confirmed)' : '(Pending)'}
+                  </div>
+                </div>
+              ))}
+
               {/* AI Suggestions */}
               {agenda?.suggestions.map((suggestion, index) => (
                 <div

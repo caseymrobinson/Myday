@@ -46,6 +46,14 @@ export interface AgendaResponse {
     start: string;
     end: string;
   }>;
+  focusBlocks: Array<{
+    id: string;
+    taskId: string;
+    taskTitle: string;
+    start: string;
+    end: string;
+    confirmed: boolean;
+  }>;
   topTasks: Array<{
     id: string;
     title: string;

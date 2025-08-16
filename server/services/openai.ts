@@ -69,12 +69,16 @@ ${pendingTasks.map((t: any) => `- ID: ${t.id}, Title: ${t.title}, Priority ${t.p
 CRITICAL INSTRUCTIONS:
 1. STRICTLY schedule tasks ONLY between 9:00 AM and 5:00 PM (business hours)
 2. All start/end times MUST be within business hours (9 AM - 5 PM)
-3. If today's business hours are full, schedule for tomorrow's business hours
-4. Schedule high priority (3) tasks first, then medium (2), then low (1)
-5. Tasks due today/tomorrow get scheduling priority
-6. Never schedule during existing meetings
-7. Leave 5-10 minute buffers between tasks
-8. If a task cannot fit today, try tomorrow before marking as unscheduled
+3. MANDATORY: ALL SCHEDULED TIMES MUST be on quarter-hour intervals ONLY: 
+   - Valid times: 09:00, 09:15, 09:30, 09:45, 10:00, 10:15, etc.
+   - NEVER use random minutes like 12:05, 13:23, or 14:07
+   - ALWAYS round to nearest 15-minute mark
+4. If today's business hours are full, schedule for tomorrow's business hours
+5. Schedule high priority (3) tasks first, then medium (2), then low (1)
+6. Tasks due today/tomorrow get scheduling priority
+7. Never schedule during existing meetings
+8. Leave 5-10 minute buffers between tasks
+9. If a task cannot fit today, try tomorrow before marking as unscheduled
 
 Return a JSON object with this structure:
 {
