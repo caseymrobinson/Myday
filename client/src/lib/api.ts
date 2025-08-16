@@ -20,6 +20,11 @@ export const api = {
     return response.json();
   },
 
+  deleteTask: async (id: string): Promise<{ message: string }> => {
+    const response = await apiRequest("DELETE", `/api/tasks/${id}`);
+    return response.json();
+  },
+
   // Agenda
   getAgenda: async (date?: string): Promise<AgendaResponse> => {
     const dateParam = date ? `?date=${date}` : '';

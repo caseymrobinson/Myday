@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { calendarService } from "./services/calendar";
 import { schedulerService } from "./services/scheduler";
 import { openaiService } from "./services/openai";
-import { insertTaskSchema, chatMessageSchema, slackIngestSchema, type AgendaResponse } from "@shared/schema";
+import { insertTaskSchema, insertFocusBlockSchema, chatMessageSchema, slackIngestSchema, type AgendaResponse } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -41,7 +41,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/tasks/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const updates = req.body;
+      const updates = {
+        ...req.body,
+        dueAt: req.body.dueAt ? new Date(req.body.dueAt) : undefined
+      };
       
       // Handle task confirmation - create focus block if status changes to confirmed
       if (updates.status === 'confirmed' && updates.aiSuggested === false) {
@@ -69,6 +72,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedTask);
     } catch (error) {
       res.status(500).json({ message: "Failed to update task" });
+    }
+  });
+
+  app.delete("/api/tasks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteTask(id);
+      if (!success) {
+        res.status(404).json({ message: "Task not found" });
+        return;
+      }
+      res.json({ message: "Task deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete task" });
     }
   });
 
@@ -237,10 +254,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/focus-blocks", async (req, res) => {
     try {
-      const focusBlock = await storage.createFocusBlock(req.body);
+      console.log("Creating focus block with data:", req.body);
+      
+      // Convert date strings to Date objects
+      const focusBlockData = {
+        ...req.body,
+        start: new Date(req.body.start),
+        end: new Date(req.body.end)
+      };
+      
+      const validatedData = insertFocusBlockSchema.parse(focusBlockData);
+      const focusBlock = await storage.createFocusBlock(validatedData);
       res.status(201).json(focusBlock);
     } catch (error) {
-      res.status(500).json({ message: "Failed to create focus block" });
+      console.error("Focus block creation error:", error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid focus block data", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to create focus block" });
+      }
     }
   });
 

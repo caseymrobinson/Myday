@@ -164,7 +164,63 @@ export default function CalendarPanel({
 
   const timeSlots = Array.from({ length: 24 }, (_, i) => i); // All 24 hours: 0-23
 
-  const getEventStyle = (start: string, end: string) => {
+  // Function to detect overlapping events and calculate positions
+  const detectOverlaps = (events: any[]) => {
+    const eventsWithPositions = events.map((event, index) => ({
+      ...event,
+      originalIndex: index,
+      position: { left: 0, width: 100 }
+    }));
+
+    // Sort by start time
+    eventsWithPositions.sort((a, b) => 
+      new Date(a.start).getTime() - new Date(b.start).getTime()
+    );
+
+    // Group overlapping events
+    const groups: any[][] = [];
+    let currentGroup: any[] = [];
+
+    eventsWithPositions.forEach((event, index) => {
+      if (index === 0) {
+        currentGroup.push(event);
+        return;
+      }
+
+      const eventStart = new Date(event.start);
+      const prevEventEnd = new Date(currentGroup[currentGroup.length - 1].end);
+
+      if (eventStart < prevEventEnd) {
+        // Overlapping with previous event
+        currentGroup.push(event);
+      } else {
+        // No overlap, start new group
+        groups.push([...currentGroup]);
+        currentGroup = [event];
+      }
+    });
+
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup);
+    }
+
+    // Calculate positions for overlapping events
+    groups.forEach(group => {
+      if (group.length > 1) {
+        const width = 100 / group.length;
+        group.forEach((event, index) => {
+          event.position = {
+            left: index * width,
+            width: width - 1 // Slight gap between events
+          };
+        });
+      }
+    });
+
+    return eventsWithPositions;
+  };
+
+  const getEventStyle = (start: string, end: string, position?: { left: number; width: number }) => {
     const startTime = new Date(start);
     const endTime = new Date(end);
     
@@ -185,7 +241,17 @@ export default function CalendarPanel({
     const top = startHourFloat * 60; // 60px per hour, starting from hour 0
     const height = duration * 60;
     
-    return { top: `${top}px`, height: `${height}px` };
+    const baseStyle = { top: `${top}px`, height: `${height}px` };
+    
+    if (position) {
+      return {
+        ...baseStyle,
+        left: `${position.left}%`,
+        width: `${position.width}%`
+      };
+    }
+    
+    return baseStyle;
   };
 
   const formatTime = (dateStr: string) => {
@@ -322,13 +388,18 @@ export default function CalendarPanel({
               ))}
               
               {/* Meetings */}
-              {agenda?.meetings.map(meeting => (
-                <div
-                  key={meeting.id}
-                  className="absolute left-2 right-2 bg-gradient-to-br from-green-200 to-green-300 border border-green-400 rounded-lg p-2 text-sm overflow-hidden"
-                  style={getEventStyle(meeting.start, meeting.end)}
-                  data-testid={`event-meeting-${meeting.id}`}
-                >
+              {(() => {
+                const allEvents = [...(agenda?.meetings || []), ...(agenda?.focusBlocks || [])];
+                const eventsWithPositions = detectOverlaps(allEvents);
+                const meetingsWithPositions = eventsWithPositions.filter(event => agenda?.meetings.some(m => m.id === event.id));
+                
+                return meetingsWithPositions.map(meeting => (
+                  <div
+                    key={meeting.id}
+                    className="absolute bg-gradient-to-br from-green-200 to-green-300 border border-green-400 rounded-lg p-2 text-sm overflow-hidden"
+                    style={getEventStyle(meeting.start, meeting.end, meeting.position)}
+                    data-testid={`event-meeting-${meeting.id}`}
+                  >
                   <div className="font-medium text-gray-800 truncate">{meeting.title}</div>
                   <div className="text-xs text-gray-600">
                     {formatTime(meeting.start)} - {formatTime(meeting.end)}
@@ -349,16 +420,22 @@ export default function CalendarPanel({
                     </div>
                   )}
                 </div>
-              ))}
+                ));
+              })()}
               
               {/* Focus Blocks */}
-              {agenda?.focusBlocks.map(focusBlock => (
-                <div
-                  key={focusBlock.id}
-                  className="absolute left-2 right-2 bg-gradient-to-br from-blue-200 to-blue-300 border border-blue-400 rounded-lg p-2 text-sm overflow-hidden"
-                  style={getEventStyle(focusBlock.start, focusBlock.end)}
-                  data-testid={`event-focus-block-${focusBlock.id}`}
-                >
+              {(() => {
+                const allEvents = [...(agenda?.meetings || []), ...(agenda?.focusBlocks || [])];
+                const eventsWithPositions = detectOverlaps(allEvents);
+                const focusBlocksWithPositions = eventsWithPositions.filter(event => agenda?.focusBlocks.some(f => f.id === event.id));
+                
+                return focusBlocksWithPositions.map(focusBlock => (
+                  <div
+                    key={focusBlock.id}
+                    className="absolute bg-gradient-to-br from-blue-200 to-blue-300 border border-blue-400 rounded-lg p-2 text-sm overflow-hidden"
+                    style={getEventStyle(focusBlock.start, focusBlock.end, focusBlock.position)}
+                    data-testid={`event-focus-block-${focusBlock.id}`}
+                  >
                   <div className="font-medium text-gray-800 truncate">{focusBlock.taskTitle}</div>
                   <div className="text-xs text-gray-600">
                     {formatTime(focusBlock.start)} - {formatTime(focusBlock.end)}
@@ -367,7 +444,8 @@ export default function CalendarPanel({
                     Focus Block {focusBlock.confirmed ? '(Confirmed)' : '(Pending)'}
                   </div>
                 </div>
-              ))}
+                ));
+              })()}
 
               {/* AI Suggestions */}
               {agenda?.suggestions.map((suggestion, index) => (

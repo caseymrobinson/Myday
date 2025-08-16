@@ -201,16 +201,24 @@ Return a JSON object with this structure:
       /dear\s+\w+/i,
       /sincerely|regards|best|thanks/i,
       /please\s+(review|complete|follow up|respond|prepare|send|schedule)/i,
-      /action items?:|next steps?:|to.?do:/i
+      /action items?:|next steps?:|to.?do:/i,
+      /here is an email/i,
+      /here's an email/i,
+      /^\d+\.\s+/m, // numbered lists (common in emails)
+      /email.*:/i
     ];
     
     // Check if message is long enough to be an email
-    const isLongEnough = message.length > 200;
+    const isLongEnough = message.length > 100;
     
     // Check if it contains multiple lines (typical of emails)
-    const hasMultipleLines = message.split('\n').length > 3;
+    const hasMultipleLines = message.split('\n').length > 2;
     
-    return (isLongEnough || hasMultipleLines) && 
+    // Check for numbered or bulleted lists (common action items)
+    const hasListItems = /^\s*[\d\-\*\•]\s+/m.test(message);
+    
+    return (isLongEnough && hasMultipleLines) || 
+           hasListItems ||
            emailPatterns.some(pattern => pattern.test(message));
   }
 

@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import type { Task } from "../types";
-import { CalendarDays, Plus, Check, X, User, MessageSquare, Bot, Slack } from "lucide-react";
+import { CalendarDays, Plus, Check, X, User, MessageSquare, Bot, Slack, Edit, Trash2 } from "lucide-react";
 
 interface TasksPanelProps {
   tasks: Task[];
@@ -28,6 +28,18 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
     },
     onError: () => {
       toast({ title: "Failed to update task", variant: "destructive" });
+    }
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: (id: string) => api.deleteTask(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      toast({ title: "Task deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete task", variant: "destructive" });
     }
   });
 
@@ -215,16 +227,38 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
                   <span className="text-xs text-gray-500" data-testid={`text-task-due-${task.id}`}>
                     {formatDueDate(task.dueAt || null) || (task.estimateMins ? `Est: ${task.estimateMins} min` : '')}
                   </span>
-                  <Button
-                    size="sm"
-                    onClick={() => markTaskDone(task)}
-                    disabled={updateTaskMutation.isPending}
-                    className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-1 h-auto"
-                    data-testid={`button-done-task-${task.id}`}
-                  >
-                    <Check className="h-3 w-3 mr-1" />
-                    Done
-                  </Button>
+                  <div className="flex space-x-1">
+                    <Button
+                      size="sm"
+                      onClick={() => {/* TODO: Add edit functionality */}}
+                      disabled={updateTaskMutation.isPending}
+                      variant="outline"
+                      className="text-xs px-2 py-1 h-auto"
+                      data-testid={`button-edit-task-${task.id}`}
+                    >
+                      <Edit className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => deleteTaskMutation.mutate(task.id)}
+                      disabled={deleteTaskMutation.isPending}
+                      variant="outline"
+                      className="text-xs px-2 py-1 h-auto text-red-600 hover:text-red-700"
+                      data-testid={`button-delete-task-${task.id}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => markTaskDone(task)}
+                      disabled={updateTaskMutation.isPending}
+                      className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-1 h-auto"
+                      data-testid={`button-done-task-${task.id}`}
+                    >
+                      <Check className="h-3 w-3 mr-1" />
+                      Done
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
