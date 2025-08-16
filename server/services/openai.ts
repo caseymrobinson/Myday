@@ -74,8 +74,7 @@ CRITICAL BUSINESS HOUR CONSTRAINTS - FOLLOW EXACTLY:
 5. **VALIDATION**: Every scheduled time must be between 13:00Z and 21:00Z (UTC equivalent of 9 AM - 5 PM ET)
 6. **NO EXCEPTIONS**: If you schedule anything outside 13:00Z-21:00Z range, you have failed the constraint
 7. Schedule high priority tasks first, respect due dates
-8. Leave 10-minute buffers between tasks
-9. Never schedule during existing meetings
+8. Never schedule during existing meetings
 
 Return a JSON object with this structure:
 {
@@ -97,14 +96,14 @@ Return a JSON object with this structure:
     }
   ],
   "recommendations": [
-    "General productivity tips for the day"
+    "This is why I scheduled it this way..."
   ]
 }`;
 
       console.log('Sending prompt to OpenAI:', prompt.substring(0, 500) + '...');
       
       const response = await openai.chat.completions.create({
-        model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
