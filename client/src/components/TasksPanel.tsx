@@ -119,7 +119,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
         <h1 className="text-xl font-semibold text-white">My tasks</h1>
       </div>
       {/* Action Buttons */}
-      <div className="flex gap-3 px-6 py-4 bg-[#292929]">
+      <div className="flex gap-3 px-6 py-4 bg-[#1e1e1e]">
         <Button 
           onClick={onAddTask}
           className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2"
