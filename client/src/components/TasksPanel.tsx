@@ -178,7 +178,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
                                 {task.estimateMins} mins
                               </span>
                             )}
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs text-blue-400 bg-[#3b82f621]">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-[#3b82f621] text-[#9ca3af]">
                               {getPriorityLabel(task.priority)}
                             </span>
                             {task.dueAt && (
