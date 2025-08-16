@@ -77,15 +77,15 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
   // Calculate positioned events for the entire day
   const calculateEventPositions = () => {
     const dayStart = new Date(currentDate);
-    dayStart.setUTCHours(0, 0, 0, 0);
+    dayStart.setHours(0, 0, 0, 0); // Use local time, not UTC
     const dayEnd = new Date(currentDate);
-    dayEnd.setUTCHours(23, 59, 59, 999);
+    dayEnd.setHours(23, 59, 59, 999);
 
-    const positionedEvents: Array<{
+    const allEvents: Array<{
       id: string;
       title: string;
-      top: number;
-      height: number;
+      start: Date;
+      end: Date;
       color: string;
       type: 'calendar' | 'focus';
     }> = [];
@@ -95,23 +95,13 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
       
-      // Only include events that occur on this day
+      // Only include events that occur on this day (using local time)
       if (eventStart >= dayStart && eventStart <= dayEnd) {
-        const startHour = eventStart.getUTCHours();
-        const startMinutes = eventStart.getUTCMinutes();
-        const endHour = eventEnd.getUTCHours();
-        const endMinutes = eventEnd.getUTCMinutes();
-        
-        // Calculate position and height
-        const top = (startHour * 64) + (startMinutes / 60 * 64); // 64px per hour
-        const durationHours = (endHour - startHour) + (endMinutes - startMinutes) / 60;
-        const height = Math.max(durationHours * 64, 32); // Minimum 32px height
-        
-        positionedEvents.push({
+        allEvents.push({
           id: event.id,
           title: event.title,
-          top,
-          height,
+          start: eventStart,
+          end: eventEnd,
           color: 'blue',
           type: 'calendar'
         });
@@ -123,27 +113,83 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       const blockStart = new Date(block.start);
       const blockEnd = new Date(block.end);
       
-      // Only include blocks that occur on this day
+      // Only include blocks that occur on this day (using local time)
       if (blockStart >= dayStart && blockStart <= dayEnd) {
-        const startHour = blockStart.getUTCHours();
-        const startMinutes = blockStart.getUTCMinutes();
-        const endHour = blockEnd.getUTCHours();
-        const endMinutes = blockEnd.getUTCMinutes();
-        
-        // Calculate position and height
-        const top = (startHour * 64) + (startMinutes / 60 * 64); // 64px per hour
-        const durationHours = (endHour - startHour) + (endMinutes - startMinutes) / 60;
-        const height = Math.max(durationHours * 64, 32); // Minimum 32px height
-        
-        positionedEvents.push({
+        allEvents.push({
           id: block.id,
           title: 'Task Block',
-          top,
-          height,
+          start: blockStart,
+          end: blockEnd,
           color: block.confirmed ? 'green' : 'purple',
           type: 'focus'
         });
       }
+    });
+
+    // Sort events by start time
+    allEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    // Detect overlapping events and assign columns
+    const positionedEvents: Array<{
+      id: string;
+      title: string;
+      top: number;
+      height: number;
+      color: string;
+      type: 'calendar' | 'focus';
+      column: number;
+      totalColumns: number;
+    }> = [];
+
+    const columns: Array<{ endTime: Date; events: any[] }> = [];
+
+    allEvents.forEach(event => {
+      // Find a column where this event doesn't overlap
+      let assignedColumn = -1;
+      for (let i = 0; i < columns.length; i++) {
+        if (event.start >= columns[i].endTime) {
+          assignedColumn = i;
+          break;
+        }
+      }
+
+      // If no column available, create a new one
+      if (assignedColumn === -1) {
+        assignedColumn = columns.length;
+        columns.push({ endTime: event.end, events: [] });
+      } else {
+        columns[assignedColumn].endTime = new Date(Math.max(columns[assignedColumn].endTime.getTime(), event.end.getTime()));
+      }
+
+      columns[assignedColumn].events.push(event);
+
+      // Calculate position and height using local time
+      const startHour = event.start.getHours();
+      const startMinutes = event.start.getMinutes();
+      const endHour = event.end.getHours();
+      const endMinutes = event.end.getMinutes();
+      
+      // Calculate position and height
+      const top = (startHour * 64) + (startMinutes / 60 * 64); // 64px per hour
+      const durationHours = (endHour - startHour) + (endMinutes - startMinutes) / 60;
+      const height = Math.max(durationHours * 64, 32); // Minimum 32px height
+
+      positionedEvents.push({
+        id: event.id,
+        title: event.title,
+        top,
+        height,
+        color: event.color,
+        type: event.type,
+        column: assignedColumn,
+        totalColumns: 0 // Will be set below
+      });
+    });
+
+    // Update totalColumns for all events
+    const maxColumns = columns.length;
+    positionedEvents.forEach(event => {
+      event.totalColumns = maxColumns;
     });
 
     return positionedEvents;
@@ -247,27 +293,39 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           })}
 
           {/* Positioned events overlay */}
-          {positionedEvents.map((event) => (
-            <div
-              key={event.id}
-              className="absolute inset-x-0 mx-2 z-20"
-              style={{
-                top: `${event.top + 16}px`, // +16px to account for hour label space
-                height: `${event.height - 8}px` // -8px for padding
-              }}
-            >
-              <div 
-                className={`
-                  ${event.color === 'blue' ? 'bg-blue-500/20 border-blue-500 text-blue-400' : ''}
-                  ${event.color === 'green' ? 'bg-green-500/20 border-green-500 text-green-400' : ''}
-                  ${event.color === 'purple' ? 'bg-purple-500/20 border-purple-500 text-purple-400' : ''}
-                  border-l-2 rounded px-2 py-1 h-full flex items-start
-                `}
+          {positionedEvents.map((event) => {
+            const leftOffset = 60; // Space for time labels
+            const eventWidth = event.totalColumns > 1 ? 
+              `calc((100% - ${leftOffset}px) / ${event.totalColumns})` : 
+              `calc(100% - ${leftOffset}px)`;
+            const leftPosition = event.totalColumns > 1 ? 
+              `${leftOffset + (event.column * ((100 - leftOffset) / event.totalColumns))}%` : 
+              `${leftOffset}px`;
+
+            return (
+              <div
+                key={event.id}
+                className="absolute z-20 pr-2"
+                style={{
+                  top: `${event.top + 16}px`, // +16px to account for hour label space
+                  height: `${event.height - 8}px`, // -8px for padding
+                  left: leftPosition,
+                  width: eventWidth
+                }}
               >
-                <p className="text-xs truncate">{event.title}</p>
+                <div 
+                  className={`
+                    ${event.color === 'blue' ? 'bg-blue-500/20 border-blue-500 text-blue-400' : ''}
+                    ${event.color === 'green' ? 'bg-green-500/20 border-green-500 text-green-400' : ''}
+                    ${event.color === 'purple' ? 'bg-purple-500/20 border-purple-500 text-purple-400' : ''}
+                    border-l-2 rounded px-2 py-1 h-full flex items-start
+                  `}
+                >
+                  <p className="text-xs truncate">{event.title}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </ScrollArea>
       
