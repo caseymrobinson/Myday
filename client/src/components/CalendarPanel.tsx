@@ -246,7 +246,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
         </div>
       </div>
       {/* Legend */}
-      <div className="px-6 py-4 bg-gray-950">
+      <div className="px-6 py-4 bg-[#1e1e1e] pt-[8px] pb-[8px]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 text-xs">
             <div className="flex items-center gap-2">
