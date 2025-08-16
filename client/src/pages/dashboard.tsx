@@ -5,10 +5,12 @@ import CalendarPanel from "@/components/CalendarPanel";
 import ChatPanel from "@/components/ChatPanel";
 import AddTaskModal from "@/components/AddTaskModal";
 import CalendarSetupModal from "@/components/CalendarSetupModal";
+import { AIPlanningPanel } from "@/components/AIPlanningPanel";
 import { api } from "@/lib/api";
 
 export default function Dashboard() {
   const [isChatOpen, setIsChatOpen] = useState(true);
+  const [isAIPlannerOpen, setIsAIPlannerOpen] = useState(false);
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [isCalendarSetupOpen, setIsCalendarSetupOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -44,13 +46,22 @@ export default function Dashboard() {
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
+        onToggleAIPlanner={() => setIsAIPlannerOpen(!isAIPlannerOpen)}
+        isAIPlannerOpen={isAIPlannerOpen}
       />
 
       {/* Chat Panel */}
-      {isChatOpen && (
+      {isChatOpen && !isAIPlannerOpen && (
         <ChatPanel 
           onClose={() => setIsChatOpen(false)}
         />
+      )}
+
+      {/* AI Planning Panel */}
+      {isAIPlannerOpen && (
+        <div className="w-96 border-l border-gray-200 flex flex-col">
+          <AIPlanningPanel selectedDate={selectedDate} />
+        </div>
       )}
 
       {/* Add Task Modal */}

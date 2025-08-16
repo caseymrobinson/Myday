@@ -3,12 +3,113 @@ import { calendarService } from "./calendar";
 import { schedulerService } from "./scheduler";
 import { storage } from "../storage";
 
-// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+// Using gpt-5-mini model as requested by the user
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || ""
 });
 
 export class OpenAIService {
+  async planDay(date: string): Promise<any> {
+    if (!process.env.OPENAI_API_KEY) {
+      return { error: "OpenAI API key not configured" };
+    }
+
+    try {
+      // Get calendar events and tasks
+      const meetings = await calendarService.getEventsForDate(date);
+      const freeBlocks = await schedulerService.getFreeTimeSlots(date);
+      const tasks = await storage.getTasks();
+      
+      // Filter pending tasks
+      const pendingTasks = tasks.filter(t => t.status === 'pending');
+      
+      // Build prompt for AI
+      const prompt = `You are an intelligent day planner. Given the following calendar events and tasks, create an optimal schedule for the day.
+
+Current Date: ${date}
+Current Time: ${new Date().toISOString()}
+
+CALENDAR EVENTS (Fixed, cannot be moved):
+${meetings.map((m: any) => `- ${m.title}: ${m.start} to ${m.end}`).join('\n')}
+
+AVAILABLE FREE TIME BLOCKS:
+${freeBlocks.map((b: any) => `- ${b.start} to ${b.end}`).join('\n')}
+
+TASKS TO SCHEDULE:
+${pendingTasks.map((t: any) => `- ID: ${t.id}, Title: ${t.title}: Priority ${t.priority}, ${t.estimateMins || 30} mins estimated${t.dueAt ? `, Due: ${t.dueAt}` : ''}`).join('\n')}
+
+INSTRUCTIONS:
+1. Schedule high priority tasks first
+2. Consider task deadlines - tasks due today or tomorrow should be scheduled sooner
+3. If no duration is specified, estimate based on task complexity (simple tasks: 15-30 mins, medium: 30-60 mins, complex: 60-120 mins)
+4. Leave buffer time between tasks for breaks
+5. Don't schedule tasks during existing calendar events
+6. Prefer morning hours for complex/important tasks
+7. Group similar tasks together when possible
+
+Return a JSON object with this structure:
+{
+  "scheduledTasks": [
+    {
+      "taskId": "task-id",
+      "taskTitle": "task title",
+      "start": "ISO datetime",
+      "end": "ISO datetime",
+      "estimatedMinutes": number,
+      "reasoning": "brief explanation of why scheduled at this time"
+    }
+  ],
+  "unscheduledTasks": [
+    {
+      "taskId": "task-id",
+      "taskTitle": "task title",
+      "reason": "why it couldn't be scheduled"
+    }
+  ],
+  "recommendations": [
+    "General productivity tips for the day"
+  ]
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert day planner AI. Create optimal schedules considering priority, deadlines, energy levels, and work patterns."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 1500
+      });
+
+      const schedule = JSON.parse(response.choices[0].message.content || "{}");
+      
+      // Transform to match our suggestion format
+      const suggestions = schedule.scheduledTasks?.map((task: any) => ({
+        taskId: task.taskId,
+        taskTitle: task.taskTitle,
+        start: task.start,
+        end: task.end,
+        estimatedMinutes: task.estimatedMinutes,
+        reasoning: task.reasoning,
+        confidence: 0.85 // AI confidence score
+      })) || [];
+
+      return {
+        suggestions,
+        unscheduledTasks: schedule.unscheduledTasks || [],
+        recommendations: schedule.recommendations || []
+      };
+    } catch (error: any) {
+      console.error("Error planning day:", error);
+      return { error: "Failed to generate day plan", details: error.message };
+    }
+  }
   async processMessage(message: string): Promise<string> {
     if (!process.env.OPENAI_API_KEY) {
       return "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.";
@@ -27,7 +128,7 @@ export class OpenAIService {
 
       // Generic conversation
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5-mini",
         messages: [
           {
             role: "system",
@@ -38,7 +139,7 @@ export class OpenAIService {
             content: message
           }
         ],
-        max_tokens: 500
+        max_completion_tokens: 500
       });
 
       return response.choices[0].message.content || "I couldn't process your request. Please try again.";
@@ -139,7 +240,7 @@ Format the response as a friendly, conversational summary that includes:
 Keep it concise but comprehensive.`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5-mini",
         messages: [
           {
             role: "system",
@@ -150,7 +251,7 @@ Keep it concise but comprehensive.`;
             content: prompt
           }
         ],
-        max_tokens: 600
+        max_completion_tokens: 600
       });
 
       return response.choices[0].message.content || "I couldn't generate your agenda summary.";
@@ -169,7 +270,7 @@ Keep it concise but comprehensive.`;
   private async extractTaskFromText(message: string): Promise<string> {
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5-mini",
         messages: [
           {
             role: "system",
@@ -190,7 +291,7 @@ Keep it concise but comprehensive.`;
           }
         ],
         response_format: { type: "json_object" },
-        max_tokens: 300
+        max_completion_tokens: 300
       });
 
       const result = JSON.parse(response.choices[0].message.content || "{}");

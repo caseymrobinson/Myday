@@ -243,6 +243,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // AI Day Planning endpoint
+  app.post("/api/ai/plan-day", async (req, res) => {
+    try {
+      const { date } = req.body;
+      const targetDate = date || new Date().toISOString().split('T')[0];
+      
+      const plan = await openaiService.planDay(targetDate);
+      
+      if (plan.error) {
+        return res.status(400).json(plan);
+      }
+      
+      res.json(plan);
+    } catch (error) {
+      console.error("Day planning error:", error);
+      res.status(500).json({ error: "Failed to generate day plan" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

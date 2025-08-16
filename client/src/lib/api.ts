@@ -1,6 +1,8 @@
 import { apiRequest } from "./queryClient";
 import type { Task, AgendaResponse } from "../types";
 
+export { apiRequest };
+
 export const api = {
   // Tasks
   getTasks: async (): Promise<Task[]> => {

@@ -13,7 +13,8 @@ import {
   Video, 
   MapPin,
   Check,
-  X
+  X,
+  Sparkles
 } from "lucide-react";
 
 interface CalendarPanelProps {
@@ -22,6 +23,8 @@ interface CalendarPanelProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
   onToggleChat: () => void;
+  onToggleAIPlanner?: () => void;
+  isAIPlannerOpen?: boolean;
 }
 
 export default function CalendarPanel({ 
@@ -29,7 +32,9 @@ export default function CalendarPanel({
   isLoading, 
   selectedDate, 
   onDateChange, 
-  onToggleChat 
+  onToggleChat,
+  onToggleAIPlanner,
+  isAIPlannerOpen
 }: CalendarPanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -160,6 +165,17 @@ export default function CalendarPanel({
             >
               <MessageCircle className="h-4 w-4" />
             </Button>
+            {onToggleAIPlanner && (
+              <Button
+                variant={isAIPlannerOpen ? "default" : "ghost"}
+                size="sm"
+                onClick={onToggleAIPlanner}
+                className={isAIPlannerOpen ? "bg-purple-600 hover:bg-purple-700" : ""}
+                data-testid="button-toggle-ai-planner"
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
         
