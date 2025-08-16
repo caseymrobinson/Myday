@@ -115,7 +115,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
   return (
     <div className="flex flex-col h-full bg-black">
       {/* Header */}
-      <div className="px-6 py-4 bg-[#292929]">
+      <div className="px-6 py-4 bg-[1E1E1E]">
         <h1 className="text-xl font-semibold text-white">My tasks</h1>
       </div>
       {/* Action Buttons */}
