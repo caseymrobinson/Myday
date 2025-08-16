@@ -103,7 +103,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
   return (
     <div className="flex flex-col h-full bg-black">
       {/* Header with Date/Time */}
-      <div className="flex items-center justify-between px-6 py-4 bg-gray-900">
+      <div className="flex items-center justify-between px-6 py-4 bg-[292929]">
         <div className="flex items-center gap-2 text-gray-400 text-sm">
           <span className="text-white text-xl font-semibold">{dateString}</span>
           <span className="text-gray-600">•</span>
@@ -143,7 +143,6 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           </Button>
         </div>
       </div>
-
       {/* Legend */}
       <div className="px-6 py-4 bg-gray-950">
         <div className="flex items-center justify-between">
@@ -163,7 +162,6 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           </div>
         </div>
       </div>
-
       {/* Calendar Grid */}
       <ScrollArea className="flex-1 bg-black">
         <div className="px-6">
@@ -209,7 +207,6 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           })}
         </div>
       </ScrollArea>
-
       {/* Interactive Chat Bubble */}
       <div className="p-4 bg-gray-950">
         <div className="bg-gray-900 rounded-2xl p-4 relative">

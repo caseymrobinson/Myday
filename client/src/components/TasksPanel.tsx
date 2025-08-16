@@ -115,12 +115,11 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
   return (
     <div className="flex flex-col h-full bg-black">
       {/* Header */}
-      <div className="px-6 py-4 bg-gray-900">
+      <div className="px-6 py-4 bg-[#292929]">
         <h1 className="text-xl font-semibold text-white">My tasks</h1>
       </div>
-
       {/* Action Buttons */}
-      <div className="flex gap-3 px-6 py-4 bg-gray-950">
+      <div className="flex gap-3 px-6 py-4 bg-[#292929]">
         <Button 
           onClick={onAddTask}
           className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2"
@@ -147,9 +146,8 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
           <Settings className="h-4 w-4" />
         </Button>
       </div>
-
       {/* Tasks Container */}
-      <div className="flex-1 overflow-y-auto px-6 bg-black">
+      <div className="flex-1 overflow-y-auto px-6 bg-[#292929]">
         {isLoading ? (
           <div className="flex items-center justify-center h-32">
             <div className="text-gray-500">Loading tasks...</div>
