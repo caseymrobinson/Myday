@@ -164,7 +164,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
                   todoTasks.map((task) => (
                     <div
                       key={task.id}
-                      className="bg-gray-900 rounded-xl p-4 hover:bg-gray-800 transition-colors"
+                      className="rounded-xl p-4 hover:bg-gray-800 transition-colors bg-[#2D2D2D]"
                       data-testid={`task-card-${task.id}`}
                     >
                       <div className="flex items-start justify-between">
