@@ -236,7 +236,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                 </form>
                 
                 {/* Quick Action Buttons */}
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 overflow-hidden">
                   <Button 
                     size="sm" 
                     variant="secondary"
