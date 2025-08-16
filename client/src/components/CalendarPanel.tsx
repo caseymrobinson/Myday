@@ -211,8 +211,8 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       
       {/* Interactive Chat Bubble - Only show when chat panel is closed */}
       {!showChat && (
-        <div className="p-4 bg-gray-950">
-          <div className="bg-gray-900 rounded-2xl p-4 relative">
+        <div className="p-4 bg-gray-950 flex justify-center">
+          <div className="bg-gray-900 rounded-2xl p-4 relative max-w-[620px] w-full">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 {/* Interactive Input */}
