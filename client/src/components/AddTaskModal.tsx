@@ -62,16 +62,8 @@ export default function AddTaskModal({ onClose }: AddTaskModalProps) {
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="w-full max-w-md mx-4">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
+          <DialogTitle>
             Add New Task
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              data-testid="button-close-add-task-modal"
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </DialogTitle>
         </DialogHeader>
         

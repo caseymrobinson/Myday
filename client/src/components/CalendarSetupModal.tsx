@@ -69,19 +69,9 @@ export default function CalendarSetupModal({ onClose }: CalendarSetupModalProps)
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="w-full max-w-lg mx-4">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Calendar className="h-5 w-5 text-blue-600 mr-2" />
-              Calendar Integration Setup
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              data-testid="button-close-calendar-setup"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+          <DialogTitle className="flex items-center">
+            <Calendar className="h-5 w-5 text-blue-600 mr-2" />
+            Calendar Integration Setup
           </DialogTitle>
           <DialogDescription>
             Connect your Google Calendar to automatically sync your meetings and events.

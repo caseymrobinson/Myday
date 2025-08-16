@@ -31,10 +31,6 @@ export default function Dashboard() {
         isLoading={tasksLoading}
         onAddTask={() => setIsAddTaskModalOpen(true)}
         onSetupCalendar={() => setIsCalendarSetupOpen(true)}
-        onGetTodaysPlan={() => {
-          // This will trigger agenda refetch
-          setSelectedDate(new Date().toISOString().split('T')[0]);
-        }}
       />
 
       {/* Calendar Panel */}

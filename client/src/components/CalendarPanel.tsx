@@ -65,11 +65,15 @@ export default function CalendarPanel({
 
   const aiScheduleMutation = useMutation({
     mutationFn: () => api.planDay(selectedDate),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      
+      // Show rationale from AI response
+      const rationale = data.recommendations?.join('\n') || 'AI successfully scheduled your tasks.';
       toast({ 
         title: "AI Scheduling Complete", 
-        description: "New task suggestions have been added to your calendar."
+        description: rationale,
+        duration: 8000 // Show longer for rationale
       });
     },
     onError: () => {

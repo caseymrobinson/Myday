@@ -232,6 +232,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete focus blocks by task ID
+  app.delete("/api/focus-blocks/task/:taskId", async (req, res) => {
+    try {
+      const { taskId } = req.params;
+      const focusBlocks = await storage.getFocusBlocks();
+      const blocksToDelete = focusBlocks.filter(block => block.taskId === taskId);
+      
+      for (const block of blocksToDelete) {
+        await storage.deleteFocusBlock(block.id);
+      }
+      
+      res.json({ message: `Deleted ${blocksToDelete.length} focus blocks for task ${taskId}` });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete focus blocks" });
+    }
+  });
+
   // Calendar events endpoint
   app.get("/api/calendar-events", async (req, res) => {
     try {

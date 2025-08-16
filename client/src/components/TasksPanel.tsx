@@ -12,10 +12,9 @@ interface TasksPanelProps {
   isLoading: boolean;
   onAddTask: () => void;
   onSetupCalendar: () => void;
-  onGetTodaysPlan: () => void;
 }
 
-export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalendar, onGetTodaysPlan }: TasksPanelProps) {
+export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalendar }: TasksPanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -39,7 +38,20 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
     });
   };
 
-  const markTaskDone = (task: Task) => {
+  const markTaskDone = async (task: Task) => {
+    // First, remove any focus blocks for this task
+    try {
+      const response = await fetch(`/api/focus-blocks/task/${task.id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) {
+        console.warn('Failed to delete focus blocks for task');
+      }
+    } catch (error) {
+      console.warn('Error deleting focus blocks:', error);
+    }
+
+    // Then mark the task as done
     updateTaskMutation.mutate({
       id: task.id,
       updates: { status: 'done' }
@@ -106,16 +118,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
             Add Task
           </Button>
         </div>
-        <div className="flex space-x-2">
-          <Button 
-            onClick={onGetTodaysPlan}
-            className="flex-1 bg-amber-500 text-white hover:bg-amber-600 text-sm"
-            size="sm"
-            data-testid="button-todays-plan"
-          >
-            <CalendarDays className="h-4 w-4 mr-1" />
-            Today's Plan
-          </Button>
+        <div className="flex justify-end">
           <Button 
             onClick={onSetupCalendar}
             variant="outline"
@@ -124,6 +127,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
             data-testid="button-setup-calendar"
           >
             <CalendarDays className="h-4 w-4" />
+            Setup Calendar
           </Button>
         </div>
       </div>
