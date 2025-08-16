@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -38,15 +38,32 @@ export default function CalendarPanel({
 }: CalendarPanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  const getCurrentTime = () => {
+    return new Date().toLocaleTimeString([], { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true 
+    });
+  };
+
+  const [currentTime, setCurrentTime] = useState(() => getCurrentTime());
+
+  // Update current time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(getCurrentTime());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const focusBlockMutation = useMutation({
     mutationFn: api.createFocusBlock,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
-      toast({ title: "Focus block confirmed" });
-    },
-    onError: () => {
-      toast({ title: "Failed to confirm focus block", variant: "destructive" });
+      toast({ title: "Focus block created successfully!" });
     }
   });
 
@@ -68,9 +85,12 @@ export default function CalendarPanel({
 
   const navigateDate = (direction: 'prev' | 'next') => {
     const currentDate = new Date(selectedDate);
-    const newDate = new Date(currentDate);
-    newDate.setDate(currentDate.getDate() + (direction === 'next' ? 1 : -1));
-    onDateChange(newDate.toISOString().split('T')[0]);
+    if (direction === 'prev') {
+      currentDate.setDate(currentDate.getDate() - 1);
+    } else {
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    onDateChange(currentDate.toISOString().split('T')[0]);
   };
 
   const goToToday = () => {
@@ -119,7 +139,7 @@ export default function CalendarPanel({
     queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
   };
 
-  const timeSlots = Array.from({ length: 12 }, (_, i) => i + 8); // 8 AM to 7 PM
+  const timeSlots = Array.from({ length: 24 }, (_, i) => i); // All 24 hours: 0-23
 
   const getEventStyle = (start: string, end: string) => {
     const startTime = new Date(start);
@@ -127,7 +147,7 @@ export default function CalendarPanel({
     const startHour = startTime.getHours() + startTime.getMinutes() / 60;
     const duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
     
-    const top = (startHour - 8) * 60; // 60px per hour
+    const top = startHour * 60; // 60px per hour, starting from hour 0
     const height = duration * 60;
     
     return { top: `${top}px`, height: `${height}px` };
@@ -135,9 +155,17 @@ export default function CalendarPanel({
 
   const formatTime = (dateStr: string) => {
     return new Date(dateStr).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true  // 12-hour format with AM/PM
     });
+  };
+
+  const formatHour = (hour: number) => {
+    if (hour === 0) return '12 AM';
+    if (hour === 12) return '12 PM';
+    if (hour < 12) return `${hour} AM`;
+    return `${hour - 12} PM`;
   };
 
   const formatted = formatDate(selectedDate);
@@ -152,10 +180,16 @@ export default function CalendarPanel({
               <CalendarIcon className="h-6 w-6 text-blue-600 mr-2" />
               My Day
             </h1>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-4">
               <span className="text-lg font-medium text-gray-700" data-testid="text-current-date">
                 {formatted.full}
               </span>
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <span>Current Time:</span>
+                <span className="font-mono font-medium" data-testid="text-current-time">
+                  {currentTime}
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -230,7 +264,7 @@ export default function CalendarPanel({
             <div className="text-gray-500">Loading calendar...</div>
           </div>
         ) : (
-          <div className="grid grid-cols-12 h-full min-h-[720px]">
+          <div className="grid grid-cols-12 h-full min-h-[1440px]">
             {/* Time Labels Column */}
             <div className="col-span-1 border-r border-gray-200">
               {timeSlots.map(hour => (
@@ -239,7 +273,7 @@ export default function CalendarPanel({
                   className="h-[60px] flex items-center justify-center text-xs text-gray-500 font-medium border-b border-gray-100"
                   data-testid={`time-slot-${hour}`}
                 >
-                  {hour}:00
+                  {formatHour(hour)}
                 </div>
               ))}
             </div>
@@ -251,7 +285,7 @@ export default function CalendarPanel({
                 <div 
                   key={hour}
                   className="absolute left-0 right-0 h-[60px] border-b border-gray-100"
-                  style={{ top: `${(hour - 8) * 60}px` }}
+                  style={{ top: `${hour * 60}px` }}
                 />
               ))}
               
