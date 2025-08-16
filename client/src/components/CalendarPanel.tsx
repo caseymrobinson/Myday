@@ -294,7 +294,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
 
           {/* Positioned events overlay */}
           {positionedEvents.map((event) => {
-            const leftOffset = 45; // Space for time labels
+            const leftOffset = 32; // Space for time labels
             const eventWidth = event.totalColumns > 1 ? 
               `calc((100% - ${leftOffset}px) / ${event.totalColumns})` : 
               `calc(100% - ${leftOffset}px)`;

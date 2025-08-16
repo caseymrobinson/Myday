@@ -28,13 +28,24 @@ export default function Dashboard() {
     queryFn: () => api.getAgenda(selectedDate.toISOString().split('T')[0])
   });
 
+  const { data: focusBlocks = [] } = useQuery({
+    queryKey: ['/api/focus-blocks'],
+    queryFn: api.getFocusBlocks
+  });
+
+  // Ensure focusBlocks are properly typed
+  const typedFocusBlocks = Array.isArray(focusBlocks) ? focusBlocks : [];
+
   const planDayMutation = useMutation({
-    mutationFn: ({ message, history }: { message: string; history: Array<{role: string, content: string}> }) => 
-      api.sendMessage(message, history || []),
-    onSuccess: () => {
+    mutationFn: (date: string) => api.planDay(date),
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
-      toast({ title: "AI is planning your day..." });
-      setShowChat(true); // Open chat to show the response
+      queryClient.invalidateQueries({ queryKey: ['/api/focus-blocks'] });
+      if (result.focusBlocksCreated && result.focusBlocksCreated > 0) {
+        toast({ title: `Planned ${result.focusBlocksCreated} tasks into your schedule` });
+      } else {
+        toast({ title: "Day planning complete - check your calendar" });
+      }
     },
     onError: () => {
       toast({ title: "Failed to plan day", variant: "destructive" });
@@ -42,8 +53,8 @@ export default function Dashboard() {
   });
 
   const handlePlanDay = () => {
-    const message = "Help me plan my day by scheduling my tasks into my calendar based on my meetings and available time blocks";
-    planDayMutation.mutate({ message, history: [] });
+    const dateString = selectedDate.toISOString().split('T')[0];
+    planDayMutation.mutate(dateString);
   };
 
   return (
@@ -69,7 +80,7 @@ export default function Dashboard() {
               start: new Date(meeting.start),
               end: new Date(meeting.end)
             })) : []}
-            focusBlocks={[]}
+            focusBlocks={typedFocusBlocks}
             onOpenChat={() => setShowChat(true)}
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}

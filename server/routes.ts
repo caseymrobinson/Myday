@@ -397,8 +397,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (plan.error) {
         return res.status(400).json(plan);
       }
-      
-      res.json(plan);
+
+      // Create focus blocks for each suggestion
+      const createdBlocks = [];
+      if (plan.suggestions && Array.isArray(plan.suggestions)) {
+        for (const suggestion of plan.suggestions) {
+          try {
+            const focusBlock = await storage.createFocusBlock({
+              taskId: suggestion.taskId,
+              start: new Date(suggestion.start),
+              end: new Date(suggestion.end),
+              confirmed: false // AI suggestions start as unconfirmed
+            });
+            createdBlocks.push(focusBlock);
+          } catch (error) {
+            console.error(`Failed to create focus block for task ${suggestion.taskId}:`, error);
+          }
+        }
+      }
+
+      res.json({
+        ...plan,
+        focusBlocksCreated: createdBlocks.length
+      });
     } catch (error) {
       console.error("Day planning error:", error);
       res.status(500).json({ error: "Failed to generate day plan" });

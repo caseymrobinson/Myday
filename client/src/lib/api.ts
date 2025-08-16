@@ -49,6 +49,11 @@ export const api = {
     return response.json();
   },
 
+  getFocusBlocks: async (): Promise<any[]> => {
+    const response = await apiRequest("GET", "/api/focus-blocks");
+    return response.json();
+  },
+
   // Calendar
   syncCalendar: async (): Promise<{ message: string }> => {
     const response = await apiRequest("POST", "/api/sync-calendar");
