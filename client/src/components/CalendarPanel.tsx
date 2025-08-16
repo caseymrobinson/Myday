@@ -371,7 +371,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                     variant="secondary"
                     onClick={() => handleQuickMessage("When is my next meeting?")}
                     disabled={sendMessageMutation.isPending}
-                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                    className="hover:bg-gray-700 text-gray-300 text-xs bg-[#383838]"
                     data-testid="quick-next-meeting"
                   >
                     Next meeting
