@@ -22,6 +22,8 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
   const [chatInput, setChatInput] = useState("");
   const { toast } = useToast();
 
+
+
   // Get current date and time for header
   const currentDate = selectedDate || new Date();
   const dateString = currentDate.toLocaleDateString('en-US', { 
@@ -74,16 +76,20 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
 
   // Check if there's an event at a specific hour
   const getEventAtHour = (hour: number) => {
-    const hourStart = new Date();
-    hourStart.setHours(hour, 0, 0, 0);
-    const hourEnd = new Date();
-    hourEnd.setHours(hour + 1, 0, 0, 0);
+    const hourStart = new Date(currentDate);
+    hourStart.setUTCHours(hour, 0, 0, 0);
+    const hourEnd = new Date(currentDate);
+    hourEnd.setUTCHours(hour + 1, 0, 0, 0);
 
     // Check calendar events
     const calendarEvent = events?.find(event => {
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
-      return eventStart < hourEnd && eventEnd > hourStart;
+      const overlap = eventStart < hourEnd && eventEnd > hourStart;
+      
+
+      
+      return overlap;
     });
 
     // Check focus blocks
