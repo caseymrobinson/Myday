@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import type { ChatMessage } from "../types";
-import { X, Bot, Send } from "lucide-react";
+import { X, Bot, Send, Sparkles } from "lucide-react";
 
 interface ChatPanelProps {
   onClose: () => void;
@@ -16,7 +17,7 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
-      message: "Hi! I'm your AI assistant. I can help you understand your schedule, manage tasks, and plan your day. Try asking \"What am I doing today?\"",
+      message: "Hi! I'm your AI assistant. I can help you understand your schedule, manage tasks, and plan your day. Try asking \"What's on my agenda today?\" or \"I need to prepare for tomorrow's presentation\"",
       timestamp: new Date(),
       isUser: false
     }
@@ -84,126 +85,121 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
     });
   };
 
+  const quickActions = [
+    { label: "What's my schedule?", icon: "📅", action: "What's on my agenda today?" },
+    { label: "Create task", icon: "✏️", action: "I need to " },
+    { label: "Next meeting", icon: "🕐", action: "When is my next meeting?" },
+    { label: "Plan my day", icon: "🎯", action: "Help me plan my day" }
+  ];
+
   return (
-    <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+    <div className="flex flex-col h-full bg-gray-950 border-l border-gray-800">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-            <Bot className="h-5 w-5 text-amber-500 mr-2" />
-            AI Assistant
-          </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            data-testid="button-close-chat"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+            <Bot className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-white font-medium">AI Assistant</h2>
+            <p className="text-xs text-gray-400">Always here to help</p>
+          </div>
         </div>
-        <p className="text-xs text-gray-500 mt-1">
-          Ask me about your schedule, tasks, or anything else!
-        </p>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="text-gray-400 hover:text-white hover:bg-gray-800"
+          data-testid="button-close-chat"
+        >
+          <X className="h-4 w-4" />
+        </Button>
       </div>
-      
+
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map(message => (
-          <div
-            key={message.id}
-            className={`flex ${message.isUser ? 'justify-end' : 'items-start space-x-2'}`}
-            data-testid={`chat-message-${message.id}`}
-          >
-            {!message.isUser && (
-              <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                <Bot className="h-3 w-3 text-white" />
+      <ScrollArea className="flex-1 px-6 py-4">
+        <div className="space-y-4">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}
+              data-testid={`chat-message-${msg.id}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                  msg.isUser
+                    ? 'bg-purple-500 text-white'
+                    : 'bg-gray-900 text-gray-200 border border-gray-800'
+                }`}
+              >
+                <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                <span className={`text-xs mt-1 block ${
+                  msg.isUser ? 'text-purple-200' : 'text-gray-500'
+                }`}>
+                  {formatTime(msg.timestamp)}
+                </span>
               </div>
-            )}
-            
-            <Card className={`max-w-xs ${message.isUser ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>
-              <CardContent className="p-3">
-                <p className="text-sm whitespace-pre-wrap">{message.message}</p>
-                <div className={`text-xs mt-1 ${message.isUser ? 'text-blue-100' : 'text-gray-500'}`}>
-                  {formatTime(message.timestamp)}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        ))}
-        
-        {sendMessageMutation.isPending && (
-          <div className="flex items-start space-x-2">
-            <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <Bot className="h-3 w-3 text-white" />
             </div>
-            <Card className="bg-gray-100">
-              <CardContent className="p-3">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          ))}
+          {sendMessageMutation.isPending && (
+            <div className="flex justify-start">
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce delay-100"></div>
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce delay-200"></div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Quick Actions */}
+      <div className="px-6 py-3 border-t border-gray-800">
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {quickActions.map((action, index) => (
+            <Button
+              key={index}
+              size="sm"
+              variant="secondary"
+              onClick={() => handleQuickAction(action.action)}
+              className="bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-800 whitespace-nowrap flex items-center gap-1"
+              data-testid={`quick-action-${index}`}
+            >
+              <span>{action.icon}</span>
+              <span className="text-xs">{action.label}</span>
+            </Button>
+          ))}
+        </div>
       </div>
-      
+
       {/* Input */}
-      <div className="p-4 border-t border-gray-200">
-        <form onSubmit={handleSubmit} className="flex space-x-2">
+      <form onSubmit={handleSubmit} className="px-6 pb-6">
+        <div className="relative">
           <Input
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            placeholder="Ask me anything about your day..."
+            placeholder="Ask me anything..."
+            className="bg-gray-900 border-gray-800 text-white placeholder-gray-500 pr-12 py-6 rounded-xl"
             disabled={sendMessageMutation.isPending}
-            data-testid="input-chat-message"
+            data-testid="chat-input"
           />
-          <Button 
-            type="submit" 
-            disabled={sendMessageMutation.isPending || !inputMessage.trim()}
-            className="bg-blue-600 text-white hover:bg-blue-700"
+          <Button
+            type="submit"
+            size="icon"
+            disabled={!inputMessage.trim() || sendMessageMutation.isPending}
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg h-8 w-8"
             data-testid="button-send-message"
           >
-            <Send className="h-4 w-4" />
-          </Button>
-        </form>
-        
-        {/* Quick Action Buttons */}
-        <div className="flex flex-wrap gap-1 mt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleQuickAction("What's my next meeting?")}
-            disabled={sendMessageMutation.isPending}
-            className="text-xs"
-            data-testid="button-quick-next-meeting"
-          >
-            Next meeting?
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleQuickAction("Show me my free time")}
-            disabled={sendMessageMutation.isPending}
-            className="text-xs"
-            data-testid="button-quick-free-time"
-          >
-            Free time?
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleQuickAction("What should I prioritize?")}
-            disabled={sendMessageMutation.isPending}
-            className="text-xs"
-            data-testid="button-quick-priorities"
-          >
-            Priorities?
+            {sendMessageMutation.isPending ? (
+              <Sparkles className="h-4 w-4 animate-pulse" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </Button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

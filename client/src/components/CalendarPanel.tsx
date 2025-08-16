@@ -1,494 +1,188 @@
-import { useState, useEffect } from "react";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
-import type { AgendaResponse } from "../types";
-import { 
-  Calendar as CalendarIcon, 
-  ChevronLeft, 
-  ChevronRight, 
-  MessageCircle, 
-  Video, 
-  MapPin,
-  Check,
-  X,
-  Sparkles
-} from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import type { CalendarEvent, FocusBlock } from "../types";
+import { Bot, MoreVertical } from "lucide-react";
+import { useState, useEffect } from "react";
 
 interface CalendarPanelProps {
-  agenda: AgendaResponse | undefined;
-  isLoading: boolean;
-  selectedDate: string;
-  onDateChange: (date: string) => void;
-  onToggleChat: () => void;
+  events: CalendarEvent[];
+  focusBlocks: FocusBlock[];
 }
 
-export default function CalendarPanel({ 
-  agenda, 
-  isLoading, 
-  selectedDate, 
-  onDateChange, 
-  onToggleChat
-}: CalendarPanelProps) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  
-  const getCurrentTime = () => {
-    return new Date().toLocaleTimeString([], { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true 
-    });
-  };
+export default function CalendarPanel({ events, focusBlocks }: CalendarPanelProps) {
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  const [currentTime, setCurrentTime] = useState(() => getCurrentTime());
-
-  // Update current time every second
+  // Update current time every minute
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTime(getCurrentTime());
-    }, 1000);
-
+      setCurrentTime(new Date());
+    }, 60000);
     return () => clearInterval(timer);
   }, []);
 
-  const focusBlockMutation = useMutation({
-    mutationFn: api.createFocusBlock,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
-      toast({ title: "Focus block created successfully!" });
-    }
-  });
-
-  const aiScheduleMutation = useMutation({
-    mutationFn: () => api.planDay(selectedDate),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
-      
-      // Show rationale from AI response
-      const rationale = data.recommendations?.join('\n') || 'AI successfully scheduled your tasks.';
-      toast({ 
-        title: "AI Scheduling Complete", 
-        description: rationale,
-        duration: 8000 // Show longer for rationale
-      });
-    },
-    onError: () => {
-      toast({ 
-        title: "Scheduling Failed", 
-        description: "Could not generate AI suggestions. Please try again.",
-        variant: "destructive"
-      });
-    }
-  });
-
-  const handleAISchedule = () => {
-    aiScheduleMutation.mutate();
-  };
-
-  const formatDate = (dateStr: string) => {
-    // Parse the date string and create a date in local time
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    
+  // Generate hour slots for the day
+  const hours = Array.from({ length: 24 }, (_, i) => {
+    const hour = i;
+    const period = hour < 12 ? 'am' : 'pm';
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return {
-      full: date.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      }),
-      day: date.toLocaleDateString('en-US', { weekday: 'long' })
+      hour24: hour,
+      label: `${displayHour} ${period}`,
+      time: new Date().setHours(hour, 0, 0, 0)
     };
-  };
+  });
 
-  const navigateDate = (direction: 'prev' | 'next') => {
-    const currentDate = new Date(selectedDate);
-    if (direction === 'prev') {
-      currentDate.setDate(currentDate.getDate() - 1);
-    } else {
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    onDateChange(currentDate.toISOString().split('T')[0]);
-  };
+  // Check if there's an event at a specific hour
+  const getEventAtHour = (hour: number) => {
+    const hourStart = new Date();
+    hourStart.setHours(hour, 0, 0, 0);
+    const hourEnd = new Date();
+    hourEnd.setHours(hour + 1, 0, 0, 0);
 
-  const goToToday = () => {
-    onDateChange(new Date().toISOString().split('T')[0]);
-  };
-
-  const confirmSuggestion = async (suggestion: any) => {
-    try {
-      // Create a focus block from the AI suggestion
-      await api.createFocusBlock({
-        taskId: suggestion.taskId,
-        start: suggestion.start,
-        end: suggestion.end,
-        confirmed: true
-      });
-      
-      // Update task status to confirmed
-      await api.updateTask(suggestion.taskId, {
-        status: 'confirmed'
-      });
-      
-      toast({
-        title: "Task Scheduled",
-        description: `${suggestion.taskTitle} has been added to your calendar`,
-      });
-      
-      // Refresh the agenda to update the view
-      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
-    } catch (error) {
-      toast({
-        title: "Scheduling Failed",
-        description: "Could not schedule the task. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const dismissSuggestion = async (suggestionId: string) => {
-    // Remove the suggestion from the current suggestions list
-    // We'll need to implement a way to filter out dismissed suggestions
-    toast({ 
-      title: "Suggestion dismissed",
-      description: "Task suggestion has been removed."
-    });
-    // Refresh to update view
-    queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
-  };
-
-  const timeSlots = Array.from({ length: 24 }, (_, i) => i); // All 24 hours: 0-23
-
-  // Function to detect overlapping events and calculate positions
-  const detectOverlaps = (events: any[]) => {
-    const eventsWithPositions = events.map((event, index) => ({
-      ...event,
-      originalIndex: index,
-      position: { left: 0, width: 100 }
-    }));
-
-    // Sort by start time
-    eventsWithPositions.sort((a, b) => 
-      new Date(a.start).getTime() - new Date(b.start).getTime()
-    );
-
-    // Group overlapping events
-    const groups: any[][] = [];
-    let currentGroup: any[] = [];
-
-    eventsWithPositions.forEach((event, index) => {
-      if (index === 0) {
-        currentGroup.push(event);
-        return;
-      }
-
+    // Check calendar events
+    const calendarEvent = events?.find(event => {
       const eventStart = new Date(event.start);
-      const prevEventEnd = new Date(currentGroup[currentGroup.length - 1].end);
-
-      if (eventStart < prevEventEnd) {
-        // Overlapping with previous event
-        currentGroup.push(event);
-      } else {
-        // No overlap, start new group
-        groups.push([...currentGroup]);
-        currentGroup = [event];
-      }
+      const eventEnd = new Date(event.end);
+      return eventStart < hourEnd && eventEnd > hourStart;
     });
 
-    if (currentGroup.length > 0) {
-      groups.push(currentGroup);
-    }
-
-    // Calculate positions for overlapping events
-    groups.forEach(group => {
-      if (group.length > 1) {
-        const width = 100 / group.length;
-        group.forEach((event, index) => {
-          event.position = {
-            left: index * width,
-            width: width - 1 // Slight gap between events
-          };
-        });
-      }
+    // Check focus blocks
+    const focusBlock = focusBlocks?.find(block => {
+      const blockStart = new Date(block.start);
+      const blockEnd = new Date(block.end);
+      return blockStart < hourEnd && blockEnd > hourStart;
     });
 
-    return eventsWithPositions;
+    return { calendarEvent, focusBlock };
   };
 
-  const getEventStyle = (start: string, end: string, position?: { left: number; width: number }) => {
-    const startTime = new Date(start);
-    const endTime = new Date(end);
-    
-    // Convert to Eastern Time for positioning on calendar
-    const startHour = startTime.toLocaleString('en-US', { 
-      timeZone: 'America/New_York',
-      hour: 'numeric',
-      hour12: false
-    });
-    const startMin = startTime.toLocaleString('en-US', {
-      timeZone: 'America/New_York', 
-      minute: 'numeric'
-    });
-    
-    const startHourFloat = parseInt(startHour) + parseInt(startMin) / 60;
-    const duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-    
-    const top = startHourFloat * 60; // 60px per hour, starting from hour 0
-    const height = duration * 60;
-    
-    const baseStyle = { top: `${top}px`, height: `${height}px` };
-    
-    if (position) {
-      return {
-        ...baseStyle,
-        left: `${position.left}%`,
-        width: `${position.width}%`
-      };
-    }
-    
-    return baseStyle;
-  };
-
-  const formatTime = (dateStr: string) => {
-    // Create date and ensure consistent timezone handling
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString([], { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true,  // 12-hour format with AM/PM
-      timeZone: 'America/New_York' // Display in Eastern Time
-    });
-  };
-
-  const formatHour = (hour: number) => {
-    if (hour === 0) return '12 AM';
-    if (hour === 12) return '12 PM';
-    if (hour < 12) return `${hour} AM`;
-    return `${hour - 12} PM`;
-  };
-
-  const formatted = formatDate(selectedDate);
+  // Get current hour for highlighting
+  const currentHour = currentTime.getHours();
 
   return (
-    <div className="flex-1 flex flex-col bg-white">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-200">
+    <div className="flex flex-col h-full bg-black border-l border-gray-800">
+      {/* Legend */}
+      <div className="px-6 py-4 border-b border-gray-800">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <span className="text-lg font-medium text-gray-700" data-testid="text-current-date">
-              {formatted.full}
-            </span>
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <span>Current Time:</span>
-              <span className="font-mono font-medium" data-testid="text-current-time">
-                {currentTime}
-              </span>
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span className="text-gray-400">Meetings</span>
             </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigateDate('prev')}
-              data-testid="button-previous-day"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              onClick={goToToday}
-              className="bg-blue-600 text-white hover:bg-blue-700"
-              size="sm"
-              data-testid="button-today"
-            >
-              Today
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigateDate('next')}
-              data-testid="button-next-day"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onToggleChat}
-              className="ml-4"
-              data-testid="button-toggle-chat"
-            >
-              <MessageCircle className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleAISchedule}
-              disabled={aiScheduleMutation.isPending}
-              className="ml-2"
-              data-testid="button-ai-schedule"
-            >
-              <Sparkles className="h-4 w-4" />
-              {aiScheduleMutation.isPending ? 'Scheduling...' : 'AI Schedule'}
-            </Button>
-          </div>
-        </div>
-        
-        {/* Legend */}
-        <div className="mt-3 flex items-center space-x-6 text-xs">
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-green-200 border border-green-400 rounded mr-2"></div>
-            <span className="text-gray-600">Meetings</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-blue-200 border border-blue-400 rounded mr-2"></div>
-            <span className="text-gray-600">Focus Blocks</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-amber-100 border-2 border-dashed border-amber-400 rounded mr-2"></div>
-            <span className="text-gray-600">AI Suggestions</span>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+              <span className="text-gray-400">Confirmed tasks</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+              <span className="text-gray-400">AI suggested tasks</span>
+            </div>
           </div>
         </div>
       </div>
-      
-      {/* Calendar Grid */}
-      <div className="flex-1 overflow-y-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-gray-500">Loading calendar...</div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-12 h-full min-h-[1440px]">
-            {/* Time Labels Column */}
-            <div className="col-span-1 border-r border-gray-200">
-              {timeSlots.map(hour => (
-                <div 
-                  key={hour}
-                  className="h-[60px] flex items-center justify-center text-xs text-gray-500 font-medium border-b border-gray-100"
-                  data-testid={`time-slot-${hour}`}
-                >
-                  {formatHour(hour)}
-                </div>
-              ))}
-            </div>
-            
-            {/* Events Column */}
-            <div className="col-span-11 relative">
-              {/* Hour grid lines */}
-              {timeSlots.map(hour => (
-                <div 
-                  key={hour}
-                  className="absolute left-0 right-0 h-[60px] border-b border-gray-100"
-                  style={{ top: `${hour * 60}px` }}
-                />
-              ))}
-              
-              {/* Meetings */}
-              {(() => {
-                const allEvents = [...(agenda?.meetings || []), ...(agenda?.focusBlocks || [])];
-                const eventsWithPositions = detectOverlaps(allEvents);
-                const meetingsWithPositions = eventsWithPositions.filter(event => agenda?.meetings.some(m => m.id === event.id));
-                
-                return meetingsWithPositions.map(meeting => (
-                  <div
-                    key={meeting.id}
-                    className="absolute bg-gradient-to-br from-green-200 to-green-300 border border-green-400 rounded-lg p-2 text-sm overflow-hidden"
-                    style={getEventStyle(meeting.start, meeting.end, meeting.position)}
-                    data-testid={`event-meeting-${meeting.id}`}
-                  >
-                  <div className="font-medium text-gray-800 truncate">{meeting.title}</div>
-                  <div className="text-xs text-gray-600">
-                    {formatTime(meeting.start)} - {formatTime(meeting.end)}
-                  </div>
-                  {meeting.location && (
-                    <div className="text-xs text-gray-600 flex items-center mt-1 truncate">
-                      {meeting.location.includes('Zoom') || meeting.location.includes('zoom') ? (
-                        <Video className="h-3 w-3 mr-1 flex-shrink-0" />
-                      ) : (
-                        <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                      )}
-                      <span className="truncate">{meeting.location}</span>
-                    </div>
-                  )}
-                  {meeting.description && (
-                    <div className="text-xs text-gray-500 mt-1 truncate" title={meeting.description}>
-                      {meeting.description}
-                    </div>
-                  )}
-                </div>
-                ));
-              })()}
-              
-              {/* Focus Blocks */}
-              {(() => {
-                const allEvents = [...(agenda?.meetings || []), ...(agenda?.focusBlocks || [])];
-                const eventsWithPositions = detectOverlaps(allEvents);
-                const focusBlocksWithPositions = eventsWithPositions.filter(event => agenda?.focusBlocks.some(f => f.id === event.id));
-                
-                return focusBlocksWithPositions.map(focusBlock => (
-                  <div
-                    key={focusBlock.id}
-                    className="absolute bg-gradient-to-br from-blue-200 to-blue-300 border border-blue-400 rounded-lg p-2 text-sm overflow-hidden"
-                    style={getEventStyle(focusBlock.start, focusBlock.end, focusBlock.position)}
-                    data-testid={`event-focus-block-${focusBlock.id}`}
-                  >
-                  <div className="font-medium text-gray-800 truncate">{focusBlock.taskTitle}</div>
-                  <div className="text-xs text-gray-600">
-                    {formatTime(focusBlock.start)} - {formatTime(focusBlock.end)}
-                  </div>
-                  <div className="text-xs text-blue-700 font-medium mt-1">
-                    Focus Block {focusBlock.confirmed ? '(Confirmed)' : '(Pending)'}
-                  </div>
-                </div>
-                ));
-              })()}
 
-              {/* AI Suggestions */}
-              {agenda?.suggestions.map((suggestion, index) => (
-                <div
-                  key={`suggestion-${index}`}
-                  className="absolute left-2 right-2 bg-gradient-to-br from-amber-100 to-amber-200 border-2 border-dashed border-amber-400 rounded-lg p-2 text-sm"
-                  style={getEventStyle(suggestion.start, suggestion.end)}
-                  data-testid={`event-suggestion-${suggestion.taskId}`}
+      {/* Calendar Grid */}
+      <ScrollArea className="flex-1">
+        <div className="px-6">
+          {hours.map((hour) => {
+            const { calendarEvent, focusBlock } = getEventAtHour(hour.hour24);
+            const isCurrentHour = hour.hour24 === currentHour;
+            
+            return (
+              <div 
+                key={hour.hour24} 
+                className={`relative h-16 border-b border-gray-900 ${isCurrentHour ? 'bg-gray-900/50' : ''}`}
+              >
+                {/* Hour label */}
+                <span className="absolute -top-2 left-0 text-xs text-gray-600">
+                  {hour.label}
+                </span>
+
+                {/* Events */}
+                {calendarEvent && (
+                  <div className="absolute inset-x-0 top-4 mx-2">
+                    <div className="bg-blue-500/20 border-l-2 border-blue-500 rounded px-2 py-1">
+                      <p className="text-xs text-blue-400 truncate">{calendarEvent.title}</p>
+                    </div>
+                  </div>
+                )}
+
+                {focusBlock && (
+                  <div className="absolute inset-x-0 top-4 mx-2">
+                    <div className={`${focusBlock.confirmed ? 'bg-green-500/20 border-green-500' : 'bg-purple-500/20 border-purple-500'} border-l-2 rounded px-2 py-1`}>
+                      <p className={`text-xs ${focusBlock.confirmed ? 'text-green-400' : 'text-purple-400'} truncate`}>
+                        Task Block
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Current time indicator */}
+                {isCurrentHour && (
+                  <div className="absolute left-0 right-0 top-1/2 h-px bg-red-500/50"></div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+
+      {/* Chat Bubble */}
+      <div className="p-4 border-t border-gray-800">
+        <div className="bg-gray-900 rounded-2xl p-4 relative">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className="text-gray-300 text-sm mb-3">Ask me about my schedule</p>
+              <div className="flex gap-2 flex-wrap">
+                <Button 
+                  size="sm" 
+                  variant="secondary"
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="font-medium text-gray-800">{suggestion.taskTitle}</div>
-                    <Badge className="bg-amber-500 text-white text-xs">AI</Badge>
-                  </div>
-                  <div className="text-xs text-gray-600 mb-2">
-                    {formatTime(suggestion.start)} - {formatTime(suggestion.end)} (Suggested)
-                  </div>
-                  <div className="flex space-x-1">
-                    <Button
-                      size="sm"
-                      onClick={() => confirmSuggestion(suggestion)}
-                      disabled={focusBlockMutation.isPending}
-                      className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-1 h-auto"
-                      data-testid={`button-confirm-suggestion-${suggestion.taskId}`}
-                    >
-                      <Check className="h-3 w-3 mr-1" />
-                      Confirm
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => dismissSuggestion(suggestion.taskId)}
-                      variant="secondary"
-                      className="text-xs px-2 py-1 h-auto"
-                      data-testid={`button-dismiss-suggestion-${suggestion.taskId}`}
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Dismiss
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                  Create task
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="secondary"
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                >
+                  Next meeting
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="secondary"
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                >
+                  Book focus time
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="secondary"
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                >
+                  Prioritize?
+                </Button>
+              </div>
+            </div>
+            <div className="ml-4 flex items-center gap-2">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-10 w-10 rounded-full bg-purple-500 hover:bg-purple-600 text-white"
+              >
+                <Bot className="h-5 w-5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-gray-400 hover:text-white"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

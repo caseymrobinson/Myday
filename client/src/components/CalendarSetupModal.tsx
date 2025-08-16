@@ -1,161 +1,136 @@
 import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { X, Calendar, ExternalLink, Info } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Calendar, AlertCircle, Check } from "lucide-react";
 
 interface CalendarSetupModalProps {
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
-export default function CalendarSetupModal({ onClose }: CalendarSetupModalProps) {
-  const [icsUrl, setIcsUrl] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetupModalProps) {
+  const [calendarUrl, setCalendarUrl] = useState("");
   const { toast } = useToast();
-  
-  // Load existing calendar URL
-  const { data: calendarData } = useQuery({
+  const queryClient = useQueryClient();
+
+  // Fetch existing calendar URL
+  const { data: existingUrl } = useQuery({
     queryKey: ['/api/calendar/url'],
-    queryFn: api.getCalendarUrl
+    queryFn: api.getCalendarUrl,
+    enabled: open
   });
-  
+
   useEffect(() => {
-    if (calendarData?.url) {
-      setIcsUrl(calendarData.url);
+    if (existingUrl?.url) {
+      setCalendarUrl(existingUrl.url);
     }
-  }, [calendarData]);
+  }, [existingUrl]);
 
-  const syncCalendarMutation = useMutation({
-    mutationFn: api.syncCalendar,
+  const setCalendarMutation = useMutation({
+    mutationFn: (url: string) => api.setCalendarUrl(url),
     onSuccess: () => {
-      toast({ title: "Calendar synced successfully!" });
-      onClose();
+      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/calendar/url'] });
+      toast({ title: "Calendar connected successfully" });
+      onOpenChange(false);
     },
     onError: () => {
       toast({ 
-        title: "Calendar sync failed", 
-        description: "Please check your iCal URL and try again.",
+        title: "Failed to connect calendar", 
+        description: "Please check your URL and try again",
         variant: "destructive" 
       });
     }
   });
 
-  const setupCalendarMutation = useMutation({
-    mutationFn: (url: string) => api.setupCalendar(url),
-    onSuccess: () => {
-      toast({ title: "Calendar setup successful!" });
-      onClose();
-    },
-    onError: () => {
-      toast({ 
-        title: "Failed to setup calendar", 
-        description: "Please check your iCal URL and try again.",
-        variant: "destructive" 
-      });
-    }
-  });
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!icsUrl.trim()) return;
-
-    setIsLoading(true);
-    try {
-      await setupCalendarMutation.mutateAsync(icsUrl);
-    } finally {
-      setIsLoading(false);
-    }
+    if (!calendarUrl.trim()) return;
+    setCalendarMutation.mutate(calendarUrl);
   };
 
-  const handleTestSync = () => {
-    syncCalendarMutation.mutate();
-  };
+  const isValidUrl = calendarUrl.includes('calendar.google.com/calendar/ical') || 
+                     calendarUrl.includes('.ics');
 
   return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-lg mx-4">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <Calendar className="h-5 w-5 text-blue-600 mr-2" />
-            Calendar Integration Setup
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-purple-500" />
+            Connect Your Calendar
           </DialogTitle>
-          <DialogDescription>
-            Connect your Google Calendar to automatically sync your meetings and events.
+          <DialogDescription className="text-gray-400">
+            Add your Google Calendar iCal URL to sync your meetings and events.
           </DialogDescription>
         </DialogHeader>
 
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription className="text-sm">
-            We use a read-only iCal URL from Google Calendar. No OAuth required - your calendar data stays secure.
-          </AlertDescription>
-        </Alert>
-        
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="icsUrl">Google Calendar iCal URL</Label>
+          <div className="space-y-2">
+            <Label htmlFor="calendar-url" className="text-gray-300">
+              iCal URL
+            </Label>
             <Input
-              id="icsUrl"
+              id="calendar-url"
               type="url"
-              value={icsUrl}
-              onChange={(e) => setIcsUrl(e.target.value)}
+              value={calendarUrl}
+              onChange={(e) => setCalendarUrl(e.target.value)}
               placeholder="https://calendar.google.com/calendar/ical/..."
-              data-testid="input-ics-url"
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+              data-testid="input-calendar-url"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Get this from your Google Calendar settings → Integrate calendar → Secret address in iCal format
-            </p>
+            {calendarUrl && !isValidUrl && (
+              <p className="text-xs text-yellow-500">
+                This doesn't look like a valid Google Calendar iCal URL
+              </p>
+            )}
+            {existingUrl?.url && (
+              <p className="text-xs text-green-500 flex items-center gap-1">
+                <Check className="h-3 w-3" />
+                Calendar already connected
+              </p>
+            )}
           </div>
 
-          <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-            <h4 className="font-medium text-sm">How to get your iCal URL:</h4>
-            <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
-              <li>Open Google Calendar on your computer</li>
-              <li>Click the three dots next to your calendar name</li>
-              <li>Select "Settings and sharing"</li>
-              <li>Scroll to "Integrate calendar"</li>
-              <li>Copy the "Secret address in iCal format" URL</li>
-            </ol>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() => window.open('https://calendar.google.com', '_blank')}
-            >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              Open Google Calendar
-            </Button>
-          </div>
-          
-          <div className="flex space-x-3 pt-4">
-            <Button 
-              type="submit" 
-              disabled={isLoading || !icsUrl.trim()}
-              className="flex-1 bg-blue-600 text-white hover:bg-blue-700"
-              data-testid="button-setup-calendar"
-            >
-              {isLoading ? "Setting up..." : "Setup Calendar"}
-            </Button>
+          <Alert className="bg-gray-800 border-gray-700">
+            <AlertCircle className="h-4 w-4 text-blue-400" />
+            <AlertDescription className="text-gray-300 text-sm">
+              <div className="space-y-2">
+                <p className="font-medium">How to get your iCal URL:</p>
+                <ol className="list-decimal list-inside space-y-1 text-xs">
+                  <li>Open Google Calendar</li>
+                  <li>Click the gear icon → Settings</li>
+                  <li>Select your calendar from the left sidebar</li>
+                  <li>Scroll to "Integrate calendar"</li>
+                  <li>Copy the "Secret address in iCal format"</li>
+                </ol>
+              </div>
+            </AlertDescription>
+          </Alert>
+
+          <div className="flex justify-end gap-3">
             <Button 
               type="button" 
-              variant="outline"
-              onClick={handleTestSync}
-              disabled={syncCalendarMutation.isPending}
-              data-testid="button-test-sync"
+              variant="outline" 
+              onClick={() => onOpenChange(false)}
+              className="border-gray-700 text-gray-300 hover:bg-gray-800"
             >
-              Test Sync
+              Cancel
             </Button>
-          </div>
-
-          <div className="text-xs text-gray-500 text-center">
-            Your calendar will automatically sync every 15 minutes once set up.
+            <Button 
+              type="submit" 
+              disabled={!calendarUrl.trim() || setCalendarMutation.isPending}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {setCalendarMutation.isPending ? "Connecting..." : 
+               existingUrl?.url ? "Update Calendar" : "Connect Calendar"}
+            </Button>
           </div>
         </form>
       </DialogContent>

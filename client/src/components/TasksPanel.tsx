@@ -1,13 +1,13 @@
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import type { Task } from "../types";
-import { CalendarDays, Plus, Check, X, User, MessageSquare, Bot, Slack, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit2, Check, X, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,8 +29,22 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
     estimateMins: 30
   });
 
+  // Get current date and time
+  const currentDate = new Date();
+  const dateString = currentDate.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  const timeString = currentDate.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
+
   const updateTaskMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<Task> }) => 
+    mutationFn: ({ id, updates }: { id: string; updates: any }) => 
       api.updateTask(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
@@ -73,295 +87,271 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
     setEditingTask(null);
   };
 
-  const confirmTask = (task: Task) => {
-    updateTaskMutation.mutate({
-      id: task.id,
-      updates: { status: 'confirmed', aiSuggested: false }
-    });
-  };
-
-  const markTaskDone = async (task: Task) => {
-    // First, remove any focus blocks for this task
-    try {
-      const response = await fetch(`/api/focus-blocks/task/${task.id}`, {
-        method: 'DELETE'
-      });
-      if (!response.ok) {
-        console.warn('Failed to delete focus blocks for task');
-      }
-    } catch (error) {
-      console.warn('Error deleting focus blocks:', error);
-    }
-
-    // Then mark the task as done
+  const handleComplete = (task: Task) => {
     updateTaskMutation.mutate({
       id: task.id,
       updates: { status: 'done' }
     });
   };
 
-  const getSourceIcon = (source: string) => {
-    switch (source) {
-      case 'slack': return <Slack className="h-3 w-3 text-purple-500" />;
-      case 'ai': return <Bot className="h-3 w-3 text-amber-500" />;
-      default: return <User className="h-3 w-3 text-blue-500" />;
-    }
+  const handleUncomplete = (task: Task) => {
+    updateTaskMutation.mutate({
+      id: task.id,
+      updates: { status: 'pending' }
+    });
   };
 
-  const getPriorityBadge = (priority: number) => {
-    switch (priority) {
-      case 3: return <Badge variant="destructive" className="text-xs">High</Badge>;
-      case 2: return <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-700">Med</Badge>;
-      default: return <Badge variant="outline" className="text-xs">Low</Badge>;
-    }
+  const getPriorityColor = (priority: number) => {
+    if (priority === 3) return "bg-red-500/20 text-red-400";
+    if (priority === 2) return "bg-yellow-500/20 text-yellow-400";
+    return "bg-blue-500/20 text-blue-400";
   };
 
-  const formatDueDate = (dueAt: Date | null) => {
-    if (!dueAt) return null;
-    const date = new Date(dueAt);
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-    
-    if (date.toDateString() === today.toDateString()) {
-      return `Due: Today ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return "Due: Tomorrow";
-    } else {
-      return `Due: ${date.toLocaleDateString()}`;
-    }
+  const getPriorityLabel = (priority: number) => {
+    if (priority === 3) return "High priority";
+    if (priority === 2) return "Medium priority";
+    return "Low priority";
   };
 
-  const aiTasks = tasks.filter(task => task.status === 'pending' && task.aiSuggested);
-  const confirmedTasks = tasks.filter(task => task.status === 'confirmed' || (task.status === 'pending' && !task.aiSuggested));
-  const doneTasks = tasks.filter(task => task.status === 'done');
+  const formatDueDate = (date: Date | string | null) => {
+    if (!date) return null;
+    const d = new Date(date);
+    return `Due ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  };
 
-  if (isLoading) {
-    return (
-      <div className="w-80 bg-white border-r border-gray-200 flex items-center justify-center">
-        <div className="text-gray-500">Loading tasks...</div>
-      </div>
-    );
-  }
+  // Separate tasks by status
+  const todoTasks = tasks.filter(t => t.status !== 'done');
+  const completedTasks = tasks.filter(t => t.status === 'done');
 
   return (
-    <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+    <div className="flex flex-col h-full bg-black">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Tasks</h2>
-          <Button 
-            onClick={onAddTask}
-            className="bg-blue-600 text-white hover:bg-blue-700 text-sm"
-            size="sm"
-            data-testid="button-add-task"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Add Task
-          </Button>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+        <h1 className="text-xl font-semibold text-white">My tasks</h1>
+        
+        <div className="flex items-center gap-2 text-gray-400 text-sm">
+          <span>{dateString}</span>
+          <span className="text-gray-600">•</span>
+          <span>{timeString}</span>
         </div>
-        <div className="flex justify-end">
+        
+        <div className="flex items-center gap-2">
           <Button 
-            onClick={onSetupCalendar}
-            variant="outline"
-            className="text-sm border-blue-200 text-blue-700 hover:bg-blue-50"
-            size="sm"
-            data-testid="button-setup-calendar"
+            variant="ghost" 
+            size="icon"
+            className="text-gray-400 hover:text-white hover:bg-gray-800"
           >
-            <CalendarDays className="h-4 w-4" />
-            Setup Calendar
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="outline"
+            className="bg-primary hover:bg-primary/90 text-white border-0"
+          >
+            Today
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon"
+            className="text-gray-400 hover:text-white hover:bg-gray-800"
+          >
+            <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Tasks List */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Unconfirmed (AI) Section */}
-        <div className="p-4 border-b border-gray-100">
-          <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
-            <Bot className="h-4 w-4 text-amber-500 mr-2" />
-            Unconfirmed (AI)
-            <Badge className="ml-2 bg-amber-100 text-amber-700 text-xs">
-              {aiTasks.length}
-            </Badge>
-          </h3>
-          
-          {aiTasks.map(task => (
-            <Card key={task.id} className="mb-3 border-2 border-amber-200 bg-amber-50" data-testid={`card-ai-task-${task.id}`}>
-              <CardContent className="p-3">
-                <div className="flex items-start justify-between mb-2">
-                  <h4 className="text-sm font-medium text-gray-800" data-testid={`text-task-title-${task.id}`}>
-                    {task.title}
-                  </h4>
-                  <div className="flex items-center space-x-1">
-                    {getSourceIcon(task.source)}
-                    <Badge className="bg-amber-500 text-white text-xs">AI</Badge>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500" data-testid={`text-task-due-${task.id}`}>
-                    {formatDueDate(task.dueAt || null) || (task.estimateMins ? `Est: ${task.estimateMins} min` : '')}
-                  </span>
-                  <div className="flex space-x-1">
-                    <Button
-                      size="sm"
-                      onClick={() => confirmTask(task)}
-                      disabled={updateTaskMutation.isPending}
-                      className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-1 h-auto"
-                      data-testid={`button-confirm-task-${task.id}`}
-                    >
-                      <Check className="h-3 w-3 mr-1" />
-                      Confirm
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => markTaskDone(task)}
-                      disabled={updateTaskMutation.isPending}
-                      variant="secondary"
-                      className="text-xs px-2 py-1 h-auto"
-                      data-testid={`button-done-task-${task.id}`}
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Done
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      {/* Action Buttons */}
+      <div className="flex gap-3 px-6 py-4">
+        <Button 
+          onClick={onAddTask}
+          className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2"
+          data-testid="button-add-task"
+        >
+          <Plus className="h-4 w-4" />
+          Create New Task
+        </Button>
+        <Button 
+          onClick={onSetupCalendar}
+          variant="outline"
+          className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white"
+          data-testid="button-plan-day"
+        >
+          📅 Plan My Day
+        </Button>
+      </div>
 
-        {/* My Tasks Section */}
-        <div className="p-4 border-b border-gray-100">
-          <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
-            <User className="h-4 w-4 text-blue-500 mr-2" />
-            My Tasks
-            <Badge className="ml-2 bg-blue-100 text-blue-700 text-xs">
-              {confirmedTasks.length}
-            </Badge>
-          </h3>
-          
-          {confirmedTasks.map(task => (
-            <Card key={task.id} className="mb-3 hover:border-gray-300 transition-colors" data-testid={`card-confirmed-task-${task.id}`}>
-              <CardContent className="p-3">
-                <div className="flex items-start justify-between mb-2">
-                  <h4 className="text-sm font-medium text-gray-800" data-testid={`text-task-title-${task.id}`}>
-                    {task.title}
-                  </h4>
-                  <div className="flex items-center space-x-1">
-                    {getSourceIcon(task.source)}
-                    {getPriorityBadge(task.priority)}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500" data-testid={`text-task-due-${task.id}`}>
-                    {formatDueDate(task.dueAt || null) || (task.estimateMins ? `Est: ${task.estimateMins} min` : '')}
-                  </span>
-                  <div className="flex space-x-1">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          size="sm"
-                          onClick={() => openEditDialog(task)}
-                          disabled={updateTaskMutation.isPending}
-                          variant="outline"
-                          className="text-xs px-2 py-1 h-auto"
-                          data-testid={`button-edit-task-${task.id}`}
-                        >
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Edit Task</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <div>
-                            <Label htmlFor="title">Title</Label>
-                            <Input
-                              id="title"
-                              value={editForm.title}
-                              onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                            />
+      {/* Tasks Container */}
+      <div className="flex-1 overflow-y-auto px-6">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="text-gray-500">Loading tasks...</div>
+          </div>
+        ) : (
+          <>
+            {/* To Do Section */}
+            <div className="mb-6">
+              <h2 className="text-sm font-medium text-gray-400 mb-3">To do</h2>
+              <div className="space-y-2">
+                {todoTasks.length === 0 ? (
+                  <div className="text-gray-600 text-sm py-4">No tasks to do</div>
+                ) : (
+                  todoTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="bg-gray-900 rounded-xl p-4 hover:bg-gray-800 transition-colors"
+                      data-testid={`task-card-${task.id}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-white font-medium mb-2" data-testid={`text-task-title-${task.id}`}>
+                            {task.title}
+                          </h3>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {task.estimateMins && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-800 text-gray-400">
+                                {task.estimateMins} mins
+                              </span>
+                            )}
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${getPriorityColor(task.priority)}`}>
+                              {getPriorityLabel(task.priority)}
+                            </span>
+                            {task.dueAt && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-800 text-gray-400">
+                                {formatDueDate(task.dueAt)}
+                              </span>
+                            )}
                           </div>
-                          <div>
-                            <Label htmlFor="priority">Priority</Label>
-                            <Select value={editForm.priority.toString()} onValueChange={(value) => setEditForm(prev => ({ ...prev, priority: parseInt(value) }))}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="1">Low</SelectItem>
-                                <SelectItem value="2">Medium</SelectItem>
-                                <SelectItem value="3">High</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label htmlFor="estimateMins">Estimate (minutes)</Label>
-                            <Input
-                              id="estimateMins"
-                              type="number"
-                              value={editForm.estimateMins}
-                              onChange={(e) => setEditForm(prev => ({ ...prev, estimateMins: parseInt(e.target.value) || 30 }))}
-                            />
-                          </div>
-                          <Button onClick={handleEditSave} className="w-full">
-                            Save Changes
+                        </div>
+                        <div className="flex items-center gap-1 ml-4">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => openEditDialog(task)}
+                                className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-700"
+                                data-testid={`button-edit-task-${task.id}`}
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="bg-gray-900 border-gray-800">
+                              <DialogHeader>
+                                <DialogTitle className="text-white">Edit Task</DialogTitle>
+                                <DialogDescription className="text-gray-400">
+                                  Make changes to your task here.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4 pt-4">
+                                <div>
+                                  <Label htmlFor="title" className="text-gray-300">Title</Label>
+                                  <Input
+                                    id="title"
+                                    value={editForm.title}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                                    className="bg-gray-800 border-gray-700 text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor="priority" className="text-gray-300">Priority</Label>
+                                  <Select value={editForm.priority.toString()} onValueChange={(value) => setEditForm(prev => ({ ...prev, priority: parseInt(value) }))}>
+                                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-gray-800 border-gray-700">
+                                      <SelectItem value="1">Low</SelectItem>
+                                      <SelectItem value="2">Medium</SelectItem>
+                                      <SelectItem value="3">High</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label htmlFor="estimateMins" className="text-gray-300">Estimate (minutes)</Label>
+                                  <Input
+                                    id="estimateMins"
+                                    type="number"
+                                    value={editForm.estimateMins}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, estimateMins: parseInt(e.target.value) || 30 }))}
+                                    className="bg-gray-800 border-gray-700 text-white"
+                                  />
+                                </div>
+                                <Button onClick={handleEditSave} className="w-full bg-primary hover:bg-primary/90">
+                                  Save Changes
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleComplete(task)}
+                            className="h-8 w-8 text-gray-400 hover:text-green-400 hover:bg-gray-700"
+                            data-testid={`button-complete-task-${task.id}`}
+                          >
+                            <Check className="h-4 w-4" />
                           </Button>
                         </div>
-                      </DialogContent>
-                    </Dialog>
-                    <Button
-                      size="sm"
-                      onClick={() => deleteTaskMutation.mutate(task.id)}
-                      disabled={deleteTaskMutation.isPending}
-                      variant="outline"
-                      className="text-xs px-2 py-1 h-auto text-red-600 hover:text-red-700"
-                      data-testid={`button-delete-task-${task.id}`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => markTaskDone(task)}
-                      disabled={updateTaskMutation.isPending}
-                      className="bg-green-600 text-white hover:bg-green-700 text-xs px-2 py-1 h-auto"
-                      data-testid={`button-done-task-${task.id}`}
-                    >
-                      <Check className="h-3 w-3 mr-1" />
-                      Done
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
-        {/* Done Section */}
-        <div className="p-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
-            <Check className="h-4 w-4 text-green-600 mr-2" />
-            Done Today
-            <Badge className="ml-2 bg-green-100 text-green-700 text-xs">
-              {doneTasks.length}
-            </Badge>
-          </h3>
-          
-          {doneTasks.map(task => (
-            <Card key={task.id} className="mb-2 bg-gray-50 opacity-75" data-testid={`card-done-task-${task.id}`}>
-              <CardContent className="p-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm text-gray-600 line-through" data-testid={`text-task-title-${task.id}`}>
-                    {task.title}
-                  </h4>
-                  <Check className="h-4 w-4 text-green-600" />
+            {/* Complete Section */}
+            {completedTasks.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-sm font-medium text-gray-400 mb-3">Complete</h2>
+                <div className="space-y-2">
+                  {completedTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="bg-gray-900/50 rounded-xl p-4 hover:bg-gray-800/50 transition-colors opacity-60"
+                      data-testid={`task-card-completed-${task.id}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-gray-400 font-medium mb-2 line-through" data-testid={`text-task-title-${task.id}`}>
+                            {task.title}
+                          </h3>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {task.estimateMins && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-800/50 text-gray-500">
+                                {task.estimateMins} mins
+                              </span>
+                            )}
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-800/50 text-gray-500">
+                              {getPriorityLabel(task.priority)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 ml-4">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleUncomplete(task)}
+                            className="h-8 w-8 text-gray-500 hover:text-white hover:bg-gray-700"
+                            data-testid={`button-uncomplete-task-${task.id}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => deleteTaskMutation.mutate(task.id)}
+                            className="h-8 w-8 text-gray-500 hover:text-red-400 hover:bg-gray-700"
+                            data-testid={`button-delete-task-${task.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
