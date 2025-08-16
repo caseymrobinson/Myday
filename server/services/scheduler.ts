@@ -86,11 +86,12 @@ export class SchedulerService {
   }
 
   private findFreeTimeSlots(date: Date, meetings: TimeSlot[], confirmedBlocks: TimeSlot[]): TimeSlot[] {
+    // Create business hours in Eastern Time (9 AM - 5 PM ET)
     const workDayStart = new Date(date);
-    workDayStart.setHours(9, 0, 0, 0); // 9 AM
+    workDayStart.setUTCHours(13, 0, 0, 0); // 9 AM ET = 13:00 UTC
     
     const workDayEnd = new Date(date);
-    workDayEnd.setHours(17, 0, 0, 0); // 5 PM
+    workDayEnd.setUTCHours(21, 0, 0, 0); // 5 PM ET = 21:00 UTC
     
     // Combine all busy slots
     const busySlots = [...meetings, ...confirmedBlocks]

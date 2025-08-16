@@ -66,19 +66,16 @@ Free Time Blocks: ${freeBlocksTomorrow.length > 0 ? freeBlocksTomorrow.map((b: a
 TASKS TO SCHEDULE:
 ${pendingTasks.map((t: any) => `- ID: ${t.id}, Title: ${t.title}, Priority ${t.priority}, Duration: ${t.estimateMins || 30} mins${t.dueAt ? `, Due: ${t.dueAt}` : ''}`).join('\n')}
 
-CRITICAL INSTRUCTIONS:
-1. STRICTLY schedule tasks ONLY between 9:00 AM and 5:00 PM (business hours)
-2. All start/end times MUST be within business hours (9 AM - 5 PM)
-3. MANDATORY: ALL SCHEDULED TIMES MUST be on quarter-hour intervals ONLY: 
-   - Valid times: 09:00, 09:15, 09:30, 09:45, 10:00, 10:15, etc.
-   - NEVER use random minutes like 12:05, 13:23, or 14:07
-   - ALWAYS round to nearest 15-minute mark
-4. If today's business hours are full, schedule for tomorrow's business hours
-5. Schedule high priority (3) tasks first, then medium (2), then low (1)
-6. Tasks due today/tomorrow get scheduling priority
-7. Never schedule during existing meetings
-8. Leave 5-10 minute buffers between tasks
-9. If a task cannot fit today, try tomorrow before marking as unscheduled
+CRITICAL BUSINESS HOUR CONSTRAINTS - FOLLOW EXACTLY:
+1. **ABSOLUTE REQUIREMENT**: Only schedule between 9:00 AM and 5:00 PM in Eastern Time (EST/EDT)
+2. **TIMEZONE CRITICAL**: When generating ISO datetime strings, ensure they represent 9 AM - 5 PM Eastern Time
+3. **EXAMPLE**: For ${date}, 9:00 AM ET = "2025-08-16T13:00:00.000Z" (UTC), 5:00 PM ET = "2025-08-16T21:00:00.000Z" (UTC)
+4. **QUARTER-HOUR ONLY**: All times MUST be on 15-minute intervals (:00, :15, :30, :45)
+5. **VALIDATION**: Every scheduled time must be between 13:00Z and 21:00Z (UTC equivalent of 9 AM - 5 PM ET)
+6. **NO EXCEPTIONS**: If you schedule anything outside 13:00Z-21:00Z range, you have failed the constraint
+7. Schedule high priority tasks first, respect due dates
+8. Leave 10-minute buffers between tasks
+9. Never schedule during existing meetings
 
 Return a JSON object with this structure:
 {

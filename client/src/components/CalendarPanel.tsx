@@ -167,10 +167,22 @@ export default function CalendarPanel({
   const getEventStyle = (start: string, end: string) => {
     const startTime = new Date(start);
     const endTime = new Date(end);
-    const startHour = startTime.getHours() + startTime.getMinutes() / 60;
+    
+    // Convert to Eastern Time for positioning on calendar
+    const startHour = startTime.toLocaleString('en-US', { 
+      timeZone: 'America/New_York',
+      hour: 'numeric',
+      hour12: false
+    });
+    const startMin = startTime.toLocaleString('en-US', {
+      timeZone: 'America/New_York', 
+      minute: 'numeric'
+    });
+    
+    const startHourFloat = parseInt(startHour) + parseInt(startMin) / 60;
     const duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
     
-    const top = startHour * 60; // 60px per hour, starting from hour 0
+    const top = startHourFloat * 60; // 60px per hour, starting from hour 0
     const height = duration * 60;
     
     return { top: `${top}px`, height: `${height}px` };
@@ -183,7 +195,7 @@ export default function CalendarPanel({
       hour: 'numeric', 
       minute: '2-digit',
       hour12: true,  // 12-hour format with AM/PM
-      timeZone: 'America/New_York' // Ensure consistent timezone
+      timeZone: 'America/New_York' // Display in Eastern Time
     });
   };
 
