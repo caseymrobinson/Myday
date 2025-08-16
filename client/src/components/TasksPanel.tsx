@@ -174,7 +174,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
                           </h3>
                           <div className="flex items-center gap-2 flex-wrap">
                             {task.estimateMins && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-800 text-gray-400">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs text-gray-400 bg-[#383838]">
                                 {task.estimateMins} mins
                               </span>
                             )}
