@@ -74,33 +74,82 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
     };
   });
 
-  // Check if there's an event at a specific hour
-  const getEventAtHour = (hour: number) => {
-    const hourStart = new Date(currentDate);
-    hourStart.setUTCHours(hour, 0, 0, 0);
-    const hourEnd = new Date(currentDate);
-    hourEnd.setUTCHours(hour + 1, 0, 0, 0);
+  // Calculate positioned events for the entire day
+  const calculateEventPositions = () => {
+    const dayStart = new Date(currentDate);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(currentDate);
+    dayEnd.setUTCHours(23, 59, 59, 999);
 
-    // Check calendar events
-    const calendarEvent = events?.find(event => {
+    const positionedEvents: Array<{
+      id: string;
+      title: string;
+      top: number;
+      height: number;
+      color: string;
+      type: 'calendar' | 'focus';
+    }> = [];
+
+    // Process calendar events
+    events?.forEach(event => {
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
-      const overlap = eventStart < hourEnd && eventEnd > hourStart;
       
-
-      
-      return overlap;
+      // Only include events that occur on this day
+      if (eventStart >= dayStart && eventStart <= dayEnd) {
+        const startHour = eventStart.getUTCHours();
+        const startMinutes = eventStart.getUTCMinutes();
+        const endHour = eventEnd.getUTCHours();
+        const endMinutes = eventEnd.getUTCMinutes();
+        
+        // Calculate position and height
+        const top = (startHour * 64) + (startMinutes / 60 * 64); // 64px per hour
+        const durationHours = (endHour - startHour) + (endMinutes - startMinutes) / 60;
+        const height = Math.max(durationHours * 64, 32); // Minimum 32px height
+        
+        positionedEvents.push({
+          id: event.id,
+          title: event.title,
+          top,
+          height,
+          color: 'blue',
+          type: 'calendar'
+        });
+      }
     });
 
-    // Check focus blocks
-    const focusBlock = focusBlocks?.find(block => {
+    // Process focus blocks
+    focusBlocks?.forEach(block => {
       const blockStart = new Date(block.start);
       const blockEnd = new Date(block.end);
-      return blockStart < hourEnd && blockEnd > hourStart;
+      
+      // Only include blocks that occur on this day
+      if (blockStart >= dayStart && blockStart <= dayEnd) {
+        const startHour = blockStart.getUTCHours();
+        const startMinutes = blockStart.getUTCMinutes();
+        const endHour = blockEnd.getUTCHours();
+        const endMinutes = blockEnd.getUTCMinutes();
+        
+        // Calculate position and height
+        const top = (startHour * 64) + (startMinutes / 60 * 64); // 64px per hour
+        const durationHours = (endHour - startHour) + (endMinutes - startMinutes) / 60;
+        const height = Math.max(durationHours * 64, 32); // Minimum 32px height
+        
+        positionedEvents.push({
+          id: block.id,
+          title: 'Task Block',
+          top,
+          height,
+          color: block.confirmed ? 'green' : 'purple',
+          type: 'focus'
+        });
+      }
     });
 
-    return { calendarEvent, focusBlock };
+    return positionedEvents;
   };
+
+  const positionedEvents = calculateEventPositions();
 
   // Get current hour for highlighting (only if viewing today)
   const now = new Date();
@@ -171,9 +220,9 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       </div>
       {/* Calendar Grid */}
       <ScrollArea className="flex-1 bg-black">
-        <div className="px-6">
+        <div className="px-6 relative">
+          {/* Hour grid background */}
           {hours.map((hour) => {
-            const { calendarEvent, focusBlock } = getEventAtHour(hour.hour24);
             const isCurrentHour = hour.hour24 === currentHour;
             
             return (
@@ -182,36 +231,43 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                 className={`relative h-16 ${isCurrentHour ? 'bg-gray-900/50' : 'hover:bg-gray-950/50'}`}
               >
                 {/* Hour label */}
-                <span className="absolute -top-2 left-0 text-xs text-gray-600">
+                <span className="absolute -top-2 left-0 text-xs text-gray-600 z-10">
                   {hour.label}
                 </span>
 
-                {/* Events */}
-                {calendarEvent && (
-                  <div className="absolute inset-x-0 top-4 mx-2">
-                    <div className="bg-blue-500/20 border-l-2 border-blue-500 rounded px-2 py-1">
-                      <p className="text-xs text-blue-400 truncate">{calendarEvent.title}</p>
-                    </div>
-                  </div>
-                )}
-
-                {focusBlock && (
-                  <div className="absolute inset-x-0 top-4 mx-2">
-                    <div className={`${focusBlock.confirmed ? 'bg-green-500/20 border-green-500' : 'bg-purple-500/20 border-purple-500'} border-l-2 rounded px-2 py-1`}>
-                      <p className={`text-xs ${focusBlock.confirmed ? 'text-green-400' : 'text-purple-400'} truncate`}>
-                        Task Block
-                      </p>
-                    </div>
-                  </div>
-                )}
+                {/* Hour divider */}
+                <div className="absolute bottom-0 left-0 right-0 h-px bg-gray-800/50"></div>
 
                 {/* Current time indicator */}
                 {isCurrentHour && (
-                  <div className="absolute left-0 right-0 top-1/2 h-px bg-red-500/50"></div>
+                  <div className="absolute left-0 right-0 top-1/2 h-px bg-red-500/50 z-30"></div>
                 )}
               </div>
             );
           })}
+
+          {/* Positioned events overlay */}
+          {positionedEvents.map((event) => (
+            <div
+              key={event.id}
+              className="absolute inset-x-0 mx-2 z-20"
+              style={{
+                top: `${event.top + 16}px`, // +16px to account for hour label space
+                height: `${event.height - 8}px` // -8px for padding
+              }}
+            >
+              <div 
+                className={`
+                  ${event.color === 'blue' ? 'bg-blue-500/20 border-blue-500 text-blue-400' : ''}
+                  ${event.color === 'green' ? 'bg-green-500/20 border-green-500 text-green-400' : ''}
+                  ${event.color === 'purple' ? 'bg-purple-500/20 border-purple-500 text-purple-400' : ''}
+                  border-l-2 rounded px-2 py-1 h-full flex items-start
+                `}
+              >
+                <p className="text-xs truncate">{event.title}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </ScrollArea>
       

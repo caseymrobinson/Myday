@@ -14,7 +14,7 @@ export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showCalendarSetup, setShowCalendarSetup] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date('2022-04-05')); // Temporarily showing a date with events
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
