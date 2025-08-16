@@ -12,6 +12,7 @@ export function AIPlanningPanel({ selectedDate }: { selectedDate: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [aiPlan, setAiPlan] = useState<any>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
   
   const planDayMutation = useMutation({
     mutationFn: async (date: string) => {
@@ -20,6 +21,8 @@ export function AIPlanningPanel({ selectedDate }: { selectedDate: string }) {
     },
     onSuccess: (data) => {
       setAiPlan(data);
+      // Show debug info for what OpenAI returned
+      setDebugInfo(JSON.stringify(data, null, 2));
       toast({
         title: "AI Schedule Generated",
         description: `Created optimal schedule with ${data.suggestions?.length || 0} task suggestions`,
@@ -197,7 +200,25 @@ export function AIPlanningPanel({ selectedDate }: { selectedDate: string }) {
             <div className="text-center py-8 text-gray-500">
               <Bot className="h-12 w-12 mx-auto mb-3 text-gray-300" />
               <p className="text-sm">Click the button above to let AI optimize your day</p>
-              <p className="text-xs mt-2">AI will consider priorities, deadlines, and energy levels</p>
+              <p className="text-xs mt-2">AI will schedule tasks between 9 AM - 5 PM business hours</p>
+            </div>
+          )}
+
+          {/* Debug Info Section */}
+          {debugInfo && (
+            <div className="mt-4 p-3 bg-gray-100 rounded-md">
+              <h4 className="font-semibold text-xs text-gray-700 mb-2">OpenAI Response (Debug):</h4>
+              <pre className="text-xs text-gray-600 overflow-auto max-h-32 whitespace-pre-wrap">
+                {debugInfo}
+              </pre>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setDebugInfo('')}
+                className="mt-2 text-xs"
+              >
+                Hide Debug Info
+              </Button>
             </div>
           )}
         </div>

@@ -87,10 +87,10 @@ export class SchedulerService {
 
   private findFreeTimeSlots(date: Date, meetings: TimeSlot[], confirmedBlocks: TimeSlot[]): TimeSlot[] {
     const workDayStart = new Date(date);
-    workDayStart.setHours(8, 0, 0, 0); // 8 AM
+    workDayStart.setHours(9, 0, 0, 0); // 9 AM
     
     const workDayEnd = new Date(date);
-    workDayEnd.setHours(20, 0, 0, 0); // 8 PM
+    workDayEnd.setHours(17, 0, 0, 0); // 5 PM
     
     // Combine all busy slots
     const busySlots = [...meetings, ...confirmedBlocks]

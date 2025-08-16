@@ -39,13 +39,14 @@ TASKS TO SCHEDULE:
 ${pendingTasks.map((t: any) => `- ID: ${t.id}, Title: ${t.title}: Priority ${t.priority}, ${t.estimateMins || 30} mins estimated${t.dueAt ? `, Due: ${t.dueAt}` : ''}`).join('\n')}
 
 INSTRUCTIONS:
-1. Schedule high priority tasks first
-2. Consider task deadlines - tasks due today or tomorrow should be scheduled sooner
-3. If no duration is specified, estimate based on task complexity (simple tasks: 15-30 mins, medium: 30-60 mins, complex: 60-120 mins)
-4. Leave buffer time between tasks for breaks
-5. Don't schedule tasks during existing calendar events
-6. Prefer morning hours for complex/important tasks
-7. Group similar tasks together when possible
+1. ONLY schedule tasks between 9:00 AM and 5:00 PM (business hours)
+2. Schedule high priority tasks first
+3. Consider task deadlines - tasks due today or tomorrow should be scheduled sooner
+4. If no duration is specified, estimate based on task complexity (simple tasks: 15-30 mins, medium: 30-60 mins, complex: 60-120 mins)
+5. Leave buffer time between tasks for breaks
+6. Don't schedule tasks during existing calendar events
+7. Prefer morning hours for complex/important tasks
+8. Group similar tasks together when possible
 
 Return a JSON object with this structure:
 {
