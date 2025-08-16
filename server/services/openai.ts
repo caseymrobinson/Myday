@@ -23,6 +23,23 @@ export class OpenAIService {
       // Filter pending tasks
       const pendingTasks = tasks.filter(t => t.status === 'pending');
       
+      console.log('DEBUG - OpenAI Planning:', {
+        date,
+        totalTasks: tasks.length,
+        pendingTasks: pendingTasks.length,
+        meetings: meetings.length,
+        freeBlocks: freeBlocks.length
+      });
+      
+      if (pendingTasks.length === 0) {
+        console.log('No pending tasks to schedule');
+        return {
+          suggestions: [],
+          unscheduledTasks: [],
+          recommendations: ["All tasks are completed! Consider adding new tasks to your list."]
+        };
+      }
+      
       // Build prompt for AI
       const prompt = `You are an intelligent day planner. Given the following calendar events and tasks, create an optimal schedule for the day.
 
@@ -72,8 +89,10 @@ Return a JSON object with this structure:
   ]
 }`;
 
+      console.log('Sending prompt to OpenAI:', prompt.substring(0, 500) + '...');
+      
       const response = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
         messages: [
           {
             role: "system",
@@ -87,6 +106,8 @@ Return a JSON object with this structure:
         response_format: { type: "json_object" },
         max_completion_tokens: 1500
       });
+      
+      console.log('OpenAI raw response:', response.choices[0].message.content);
 
       const schedule = JSON.parse(response.choices[0].message.content || "{}");
       
