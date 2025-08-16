@@ -6,6 +6,11 @@ import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import type { Task } from "../types";
 import { CalendarDays, Plus, Check, X, User, MessageSquare, Bot, Slack, Edit, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TasksPanelProps {
   tasks: Task[];
@@ -17,6 +22,12 @@ interface TasksPanelProps {
 export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalendar }: TasksPanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    priority: 2,
+    estimateMins: 30
+  });
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Task> }) => 
@@ -42,6 +53,25 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
       toast({ title: "Failed to delete task", variant: "destructive" });
     }
   });
+
+  const openEditDialog = (task: Task) => {
+    setEditingTask(task);
+    setEditForm({
+      title: task.title,
+      priority: task.priority,
+      estimateMins: task.estimateMins || 30
+    });
+  };
+
+  const handleEditSave = () => {
+    if (!editingTask) return;
+    
+    updateTaskMutation.mutate({
+      id: editingTask.id,
+      updates: editForm
+    });
+    setEditingTask(null);
+  };
 
   const confirmTask = (task: Task) => {
     updateTaskMutation.mutate({
@@ -228,16 +258,60 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
                     {formatDueDate(task.dueAt || null) || (task.estimateMins ? `Est: ${task.estimateMins} min` : '')}
                   </span>
                   <div className="flex space-x-1">
-                    <Button
-                      size="sm"
-                      onClick={() => {/* TODO: Add edit functionality */}}
-                      disabled={updateTaskMutation.isPending}
-                      variant="outline"
-                      className="text-xs px-2 py-1 h-auto"
-                      data-testid={`button-edit-task-${task.id}`}
-                    >
-                      <Edit className="h-3 w-3" />
-                    </Button>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          onClick={() => openEditDialog(task)}
+                          disabled={updateTaskMutation.isPending}
+                          variant="outline"
+                          className="text-xs px-2 py-1 h-auto"
+                          data-testid={`button-edit-task-${task.id}`}
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Edit Task</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="title">Title</Label>
+                            <Input
+                              id="title"
+                              value={editForm.title}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="priority">Priority</Label>
+                            <Select value={editForm.priority.toString()} onValueChange={(value) => setEditForm(prev => ({ ...prev, priority: parseInt(value) }))}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">Low</SelectItem>
+                                <SelectItem value="2">Medium</SelectItem>
+                                <SelectItem value="3">High</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor="estimateMins">Estimate (minutes)</Label>
+                            <Input
+                              id="estimateMins"
+                              type="number"
+                              value={editForm.estimateMins}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, estimateMins: parseInt(e.target.value) || 30 }))}
+                            />
+                          </div>
+                          <Button onClick={handleEditSave} className="w-full">
+                            Save Changes
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                     <Button
                       size="sm"
                       onClick={() => deleteTaskMutation.mutate(task.id)}

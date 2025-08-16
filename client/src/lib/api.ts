@@ -33,8 +33,8 @@ export const api = {
   },
 
   // Chat
-  sendMessage: async (message: string): Promise<{ response: string }> => {
-    const response = await apiRequest("POST", "/api/chat", { message });
+  sendMessage: async (message: string, history?: Array<{role: string, content: string}>): Promise<{ response: string }> => {
+    const response = await apiRequest("POST", "/api/chat", { message, history });
     return response.json();
   },
 

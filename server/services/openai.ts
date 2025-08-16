@@ -143,7 +143,7 @@ Return a JSON object with this structure:
       return { error: "Failed to generate day plan", details: error.message };
     }
   }
-  async processMessage(message: string): Promise<string> {
+  async processMessage(message: string, conversationHistory: any[] = []): Promise<string> {
     if (!process.env.OPENAI_API_KEY) {
       return "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.";
     }
@@ -154,25 +154,30 @@ Return a JSON object with this structure:
         return await this.generateAgendaSummary();
       }
 
-      // Check if message contains email content or asks for task extraction
-      if (this.isEmailContent(message) || this.isTaskExtractionQuery(message)) {
-        const result = await this.extractTasksFromEmail(message);
+      // Check if user is asking to create a task or message contains action items
+      if (this.isTaskCreationRequest(message) || this.hasActionItems(message)) {
+        const result = await this.extractTasksFromText(message);
         return result.summary;
       }
+
+      // Build conversation messages with history
+      const messages = [
+        {
+          role: "system" as const,
+          content: "You are a helpful AI assistant for a daily planning application called 'My Day'. You help users manage their schedule, tasks, and productivity. You can create tasks when users ask or when you identify action items in their messages. Be concise and actionable in your responses. Remember context from previous messages in this conversation."
+        },
+        // Add conversation history
+        ...conversationHistory.slice(-6), // Keep last 6 messages for context
+        {
+          role: "user" as const,
+          content: message
+        }
+      ];
 
       // Generic conversation
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: "You are a helpful AI assistant for a daily planning application. You help users manage their schedule, tasks, and productivity. Be concise and actionable in your responses."
-          },
-          {
-            role: "user",
-            content: message
-          }
-        ],
+        messages,
         max_tokens: 500
       });
 
@@ -237,16 +242,37 @@ Return a JSON object with this structure:
     return scheduleKeywords.some(keyword => lowerMessage.includes(keyword));
   }
 
-  private isTaskExtractionQuery(message: string): boolean {
+  private isTaskCreationRequest(message: string): boolean {
     const taskKeywords = [
-      "extract task",
-      "create task from",
-      "parse this message",
-      "task from slack"
+      "create task",
+      "add task",
+      "new task",
+      "i need to",
+      "remind me to",
+      "todo",
+      "to do",
+      "task:",
+      "action item",
+      "follow up",
+      "schedule to"
     ];
     
     const lowerMessage = message.toLowerCase();
     return taskKeywords.some(keyword => lowerMessage.includes(keyword));
+  }
+
+  private hasActionItems(message: string): boolean {
+    // Check for action-oriented language and task patterns
+    const actionPatterns = [
+      /^(i need to|i have to|i should|i must|need to|have to|should|must)\s+/im,
+      /please\s+(review|complete|follow up|respond|prepare|send|schedule|call|email)/i,
+      /action items?:|next steps?:|to.?do:/i,
+      /^\s*[\d\-\*\•]\s+/m, // numbered or bulleted lists
+      /(due|deadline|by|before)\s+(today|tomorrow|this week|next week|friday|monday|tuesday|wednesday|thursday|saturday|sunday)/i
+    ];
+    
+    return actionPatterns.some(pattern => pattern.test(message)) || 
+           (message.split('\n').length > 1 && /^\s*[\d\-\*\•]/.test(message));
   }
 
   private async generateAgendaSummary(): Promise<string> {
@@ -333,7 +359,7 @@ Keep it concise but comprehensive.`;
     return "Please use the new task extraction feature. Simply paste your email or text and I'll extract all action items for you.";
   }
   
-  async extractTasksFromEmail(emailContent: string): Promise<{ tasks: any[], summary: string }> {
+  async extractTasksFromText(textContent: string): Promise<{ tasks: any[], summary: string }> {
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -360,7 +386,7 @@ Keep it concise but comprehensive.`;
           },
           {
             role: "user",
-            content: `Extract all tasks from this text:\n\n${emailContent}`
+            content: `Extract all tasks and action items from this text:\n\n${textContent}`
           }
         ],
         response_format: { type: "json_object" },

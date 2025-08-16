@@ -4,11 +4,14 @@ My Day is an AI-first daily planning assistant that combines calendar integratio
 
 ## Recent Changes (Aug 16, 2025)
 - **Fixed chat functionality** - Corrected OpenAI model from "gpt-5-mini" to "gpt-4o-mini" for stable chat operations
-- **Added email task extraction** - Chat can now extract multiple action items from emails/text and automatically create tasks
+- **Enhanced AI task creation** - Chat now intelligently detects task creation requests from any text, not just emails
+- **Added conversation memory** - Chat maintains context across messages within a session for more natural interactions
+- **Fixed task deletion** - Resolved foreign key constraint errors by properly handling associated focus blocks
+- **Implemented task editing** - Added full edit functionality with dialog interface for title, priority, and time estimates
+- **Fixed overlapping calendar events** - Events now display side-by-side when times conflict instead of overlapping
 - **Implemented database persistence** - Migrated from in-memory to PostgreSQL storage for permanent data retention
 - **Calendar URL persistence** - iCal URL now stored in database and persists across builds/updates
-- **Enhanced task creation from AI** - Comprehensive task extraction with priorities, deadlines, and context from email content
-- **Settings management** - New settings table for storing persistent configuration like calendar URLs
+- **Enhanced task detection patterns** - AI recognizes various task creation patterns like "I need to", "remind me to", etc.
 
 # User Preferences
 

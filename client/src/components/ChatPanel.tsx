@@ -25,14 +25,15 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
   const { toast } = useToast();
 
   const sendMessageMutation = useMutation({
-    mutationFn: api.sendMessage,
+    mutationFn: ({ message, history }: { message: string; history: Array<{role: string, content: string}> }) => 
+      api.sendMessage(message, history),
     onSuccess: (data, variables) => {
       // Add user message and AI response
       setMessages(prev => [
         ...prev,
         {
           id: Date.now().toString(),
-          message: variables,
+          message: variables.message,
           timestamp: new Date(),
           isUser: true
         },
@@ -52,17 +53,27 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
     }
   });
 
+  // Convert messages to conversation history format
+  const getConversationHistory = () => {
+    return messages.slice(1).map(msg => ({
+      role: msg.isUser ? 'user' as const : 'assistant' as const,
+      content: msg.message
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputMessage.trim()) return;
     
-    sendMessageMutation.mutate(inputMessage);
+    const history = getConversationHistory();
+    sendMessageMutation.mutate({ message: inputMessage, history });
     setInputMessage("");
   };
 
   const handleQuickAction = (message: string) => {
+    const history = getConversationHistory();
     setInputMessage(message);
-    sendMessageMutation.mutate(message);
+    sendMessageMutation.mutate({ message, history });
     setInputMessage("");
   };
 

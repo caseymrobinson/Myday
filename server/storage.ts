@@ -275,8 +275,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTask(id: string): Promise<boolean> {
+    // First delete all associated focus blocks
+    await db.delete(focusBlocks).where(eq(focusBlocks.taskId, id));
+    
+    // Then delete the task
     const result = await db.delete(tasks).where(eq(tasks.id, id));
-    return true;
+    return (result as any).rowCount > 0;
   }
 
   // Focus Blocks

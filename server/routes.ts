@@ -173,8 +173,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Chat endpoint
   app.post("/api/chat", async (req, res) => {
     try {
-      const { message } = chatMessageSchema.parse(req.body);
-      const response = await openaiService.processMessage(message);
+      const { message, history } = z.object({ 
+        message: z.string(), 
+        history: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string()
+        })).optional().default([])
+      }).parse(req.body);
+      
+      const response = await openaiService.processMessage(message, history);
       res.json({ response });
     } catch (error) {
       if (error instanceof z.ZodError) {
