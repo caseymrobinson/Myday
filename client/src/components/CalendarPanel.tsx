@@ -361,7 +361,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                     variant="secondary"
                     onClick={() => handleQuickMessage("I need to create a task")}
                     disabled={sendMessageMutation.isPending}
-                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                    className="hover:bg-gray-700 text-gray-300 text-xs bg-[#383838]"
                     data-testid="quick-create-task"
                   >
                     Create task
