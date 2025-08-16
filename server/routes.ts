@@ -131,8 +131,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             id: block.id,
             taskId: block.taskId,
             taskTitle: task?.title || 'Unknown Task',
-            start: block.start.toISOString(),
-            end: block.end.toISOString(),
+            start: typeof block.start === 'string' ? block.start : block.start.toISOString(),
+            end: typeof block.end === 'string' ? block.end : block.end.toISOString(),
             confirmed: block.confirmed
           };
         })

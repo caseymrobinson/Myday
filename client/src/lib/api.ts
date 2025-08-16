@@ -53,5 +53,11 @@ export const api = {
   setupCalendar: async (icsUrl: string): Promise<{ message: string }> => {
     const response = await apiRequest("POST", "/api/calendar/setup", { icsUrl });
     return response.json();
+  },
+
+  // AI Planning
+  planDay: async (date: string): Promise<any> => {
+    const response = await apiRequest("POST", "/api/ai/plan-day", { date });
+    return response.json();
   }
 };

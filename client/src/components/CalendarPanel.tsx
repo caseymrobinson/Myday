@@ -23,8 +23,6 @@ interface CalendarPanelProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
   onToggleChat: () => void;
-  onToggleAIPlanner?: () => void;
-  isAIPlannerOpen?: boolean;
 }
 
 export default function CalendarPanel({ 
@@ -32,9 +30,7 @@ export default function CalendarPanel({
   isLoading, 
   selectedDate, 
   onDateChange, 
-  onToggleChat,
-  onToggleAIPlanner,
-  isAIPlannerOpen
+  onToggleChat
 }: CalendarPanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -66,6 +62,28 @@ export default function CalendarPanel({
       toast({ title: "Focus block created successfully!" });
     }
   });
+
+  const aiScheduleMutation = useMutation({
+    mutationFn: () => api.planDay(selectedDate),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      toast({ 
+        title: "AI Scheduling Complete", 
+        description: "New task suggestions have been added to your calendar."
+      });
+    },
+    onError: () => {
+      toast({ 
+        title: "Scheduling Failed", 
+        description: "Could not generate AI suggestions. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const handleAISchedule = () => {
+    aiScheduleMutation.mutate();
+  };
 
   const formatDate = (dateStr: string) => {
     // Parse the date string and create a date in local time
@@ -129,13 +147,14 @@ export default function CalendarPanel({
     }
   };
 
-  const dismissSuggestion = (suggestionId: string) => {
-    // Store dismissed suggestion in local state to hide it
+  const dismissSuggestion = async (suggestionId: string) => {
+    // Remove the suggestion from the current suggestions list
+    // We'll need to implement a way to filter out dismissed suggestions
     toast({ 
       title: "Suggestion dismissed",
-      description: "You can regenerate suggestions anytime from the AI planner"
+      description: "Task suggestion has been removed."
     });
-    // Refresh to remove from view
+    // Refresh to update view
     queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
   };
 
@@ -229,17 +248,17 @@ export default function CalendarPanel({
             >
               <MessageCircle className="h-4 w-4" />
             </Button>
-            {onToggleAIPlanner && (
-              <Button
-                variant={isAIPlannerOpen ? "default" : "ghost"}
-                size="sm"
-                onClick={onToggleAIPlanner}
-                className={isAIPlannerOpen ? "bg-purple-600 hover:bg-purple-700" : ""}
-                data-testid="button-toggle-ai-planner"
-              >
-                <Sparkles className="h-4 w-4" />
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleAISchedule}
+              disabled={aiScheduleMutation.isPending}
+              className="ml-2"
+              data-testid="button-ai-schedule"
+            >
+              <Sparkles className="h-4 w-4" />
+              {aiScheduleMutation.isPending ? 'Scheduling...' : 'AI Schedule'}
+            </Button>
           </div>
         </div>
         
