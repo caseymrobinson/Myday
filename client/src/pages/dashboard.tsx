@@ -73,6 +73,7 @@ export default function Dashboard() {
             onOpenChat={() => setShowChat(true)}
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
+            showChat={showChat}
           />
         </div>
 

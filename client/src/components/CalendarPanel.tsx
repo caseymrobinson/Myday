@@ -15,9 +15,10 @@ interface CalendarPanelProps {
   onOpenChat: () => void;
   selectedDate: Date;
   onDateChange: (date: Date) => void;
+  showChat: boolean;
 }
 
-export default function CalendarPanel({ events, focusBlocks, onOpenChat, selectedDate, onDateChange }: CalendarPanelProps) {
+export default function CalendarPanel({ events, focusBlocks, onOpenChat, selectedDate, onDateChange, showChat }: CalendarPanelProps) {
   const [chatInput, setChatInput] = useState("");
   const { toast } = useToast();
 
@@ -103,7 +104,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
   return (
     <div className="flex flex-col h-full bg-black">
       {/* Header with Date/Time */}
-      <div className="flex items-center justify-between px-6 py-4 bg-[#292929]">
+      <div className="flex items-center justify-between px-6 py-4 bg-gray-900">
         <div className="flex items-center gap-2 text-gray-400 text-sm">
           <span className="text-white text-xl font-semibold">{dateString}</span>
           <span className="text-gray-600">•</span>
@@ -207,89 +208,92 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           })}
         </div>
       </ScrollArea>
-      {/* Interactive Chat Bubble */}
-      <div className="p-4 bg-gray-950">
-        <div className="bg-gray-900 rounded-2xl p-4 relative">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              {/* Interactive Input */}
-              <form onSubmit={handleChatSubmit} className="relative mb-3">
-                <Input
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ask me about my schedule"
-                  className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 pr-10 rounded-lg"
-                  disabled={sendMessageMutation.isPending}
-                  data-testid="schedule-chat-input"
-                />
+      
+      {/* Interactive Chat Bubble - Only show when chat panel is closed */}
+      {!showChat && (
+        <div className="p-4 bg-gray-950">
+          <div className="bg-gray-900 rounded-2xl p-4 relative">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                {/* Interactive Input */}
+                <form onSubmit={handleChatSubmit} className="relative mb-3">
+                  <Input
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask me about my schedule"
+                    className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 pr-10 rounded-lg"
+                    disabled={sendMessageMutation.isPending}
+                    data-testid="schedule-chat-input"
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={!chatInput.trim() || sendMessageMutation.isPending}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 bg-purple-500 hover:bg-purple-600 text-white rounded h-7 w-7"
+                  >
+                    <Send className="h-3 w-3" />
+                  </Button>
+                </form>
+                
+                {/* Quick Action Buttons */}
+                <div className="flex gap-2 flex-wrap">
+                  <Button 
+                    size="sm" 
+                    variant="secondary"
+                    onClick={() => handleQuickMessage("I need to create a task")}
+                    disabled={sendMessageMutation.isPending}
+                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                    data-testid="quick-create-task"
+                  >
+                    Create task
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="secondary"
+                    onClick={() => handleQuickMessage("When is my next meeting?")}
+                    disabled={sendMessageMutation.isPending}
+                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                    data-testid="quick-next-meeting"
+                  >
+                    Next meeting
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="secondary"
+                    onClick={() => handleQuickMessage("Book focus time for me")}
+                    disabled={sendMessageMutation.isPending}
+                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                    data-testid="quick-book-focus"
+                  >
+                    Book focus time
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="secondary"
+                    onClick={() => handleQuickMessage("Help me prioritize my tasks")}
+                    disabled={sendMessageMutation.isPending}
+                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                    data-testid="quick-prioritize"
+                  >
+                    Prioritize?
+                  </Button>
+                </div>
+              </div>
+              <div className="ml-4 flex items-center gap-2">
                 <Button
-                  type="submit"
                   size="icon"
-                  disabled={!chatInput.trim() || sendMessageMutation.isPending}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 bg-purple-500 hover:bg-purple-600 text-white rounded h-7 w-7"
+                  variant="ghost"
+                  onClick={onOpenChat}
+                  className="h-10 w-10 rounded-full bg-purple-500 hover:bg-purple-600 text-white"
+                  data-testid="button-open-chat-panel"
                 >
-                  <Send className="h-3 w-3" />
-                </Button>
-              </form>
-              
-              {/* Quick Action Buttons */}
-              <div className="flex gap-2 flex-wrap">
-                <Button 
-                  size="sm" 
-                  variant="secondary"
-                  onClick={() => handleQuickMessage("I need to create a task")}
-                  disabled={sendMessageMutation.isPending}
-                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
-                  data-testid="quick-create-task"
-                >
-                  Create task
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="secondary"
-                  onClick={() => handleQuickMessage("When is my next meeting?")}
-                  disabled={sendMessageMutation.isPending}
-                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
-                  data-testid="quick-next-meeting"
-                >
-                  Next meeting
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="secondary"
-                  onClick={() => handleQuickMessage("Book focus time for me")}
-                  disabled={sendMessageMutation.isPending}
-                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
-                  data-testid="quick-book-focus"
-                >
-                  Book focus time
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="secondary"
-                  onClick={() => handleQuickMessage("Help me prioritize my tasks")}
-                  disabled={sendMessageMutation.isPending}
-                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
-                  data-testid="quick-prioritize"
-                >
-                  Prioritize?
+                  <Bot className="h-5 w-5" />
                 </Button>
               </div>
             </div>
-            <div className="ml-4 flex items-center gap-2">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={onOpenChat}
-                className="h-10 w-10 rounded-full bg-purple-500 hover:bg-purple-600 text-white"
-                data-testid="button-open-chat-panel"
-              >
-                <Bot className="h-5 w-5" />
-              </Button>
-            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
