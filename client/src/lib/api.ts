@@ -65,6 +65,16 @@ export const api = {
     return response.json();
   },
 
+  removeCalendar: async (): Promise<{ success: boolean; message: string }> => {
+    const response = await apiRequest("DELETE", "/api/calendar/url");
+    return response.json();
+  },
+
+  clearCalendarEvents: async (): Promise<{ success: boolean; message: string }> => {
+    const response = await apiRequest("DELETE", "/api/calendar/events");
+    return response.json();
+  },
+
   // AI Planning
   planDay: async (date: string): Promise<any> => {
     const response = await apiRequest("POST", "/api/ai/plan-day", { date });

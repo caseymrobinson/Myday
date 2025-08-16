@@ -54,6 +54,15 @@ export class CalendarService {
     return this.icsUrl;
   }
 
+  async removeCalendar(): Promise<void> {
+    this.icsUrl = null;
+    // Clear URL from database
+    await storage.setSetting('calendar_url', '');
+    // Clear all calendar events
+    await storage.clearCalendarEvents();
+    console.log('Calendar removed and events cleared');
+  }
+
   private startCronJob() {
     // Run every 15 minutes
     cron.schedule("*/15 * * * *", async () => {
@@ -78,8 +87,14 @@ export class CalendarService {
       console.log(`Fetching calendar from: ${this.icsUrl}`);
       const events = await ical.fromURL(this.icsUrl);
       
+      console.log(`Total calendar objects parsed: ${Object.keys(events).length}`);
+      
       // Clear existing events
       await storage.clearCalendarEvents();
+      console.log("Cleared existing calendar events");
+      
+      let processedCount = 0;
+      let skippedCount = 0;
       
       // Process each event
       for (const [key, event] of Object.entries(events)) {
@@ -88,22 +103,42 @@ export class CalendarService {
           
           // Only process events that have valid dates
           if (icalEvent.start && icalEvent.end) {
-            const normalizedEvent: InsertCalendarEvent = {
-              id: icalEvent.uid || key,
-              title: icalEvent.summary || "Untitled Event",
-              start: new Date(icalEvent.start),
-              end: new Date(icalEvent.end),
-              location: icalEvent.location || null,
-              description: icalEvent.description || null,
-              isAllDay: this.isAllDayEvent(icalEvent.start, icalEvent.end)
-            };
+            const eventStart = new Date(icalEvent.start);
+            const eventEnd = new Date(icalEvent.end);
+            
+            // Only sync events from the last 30 days to next 365 days to avoid too much old data
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const oneYearFromNow = new Date();
+            oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+            
+            if (eventStart >= thirtyDaysAgo && eventStart <= oneYearFromNow) {
+              const normalizedEvent: InsertCalendarEvent = {
+                id: icalEvent.uid || key,
+                title: icalEvent.summary || "Untitled Event",
+                start: eventStart,
+                end: eventEnd,
+                location: icalEvent.location || null,
+                description: icalEvent.description || null,
+                isAllDay: this.isAllDayEvent(icalEvent.start, icalEvent.end)
+              };
 
-            await storage.createCalendarEvent(normalizedEvent);
+              await storage.createCalendarEvent(normalizedEvent);
+              processedCount++;
+              
+              if (processedCount <= 5) {
+                console.log(`Processed event: ${normalizedEvent.title} (${eventStart.toISOString()})`);
+              }
+            } else {
+              skippedCount++;
+            }
+          } else {
+            skippedCount++;
           }
         }
       }
       
-      console.log("Calendar sync completed successfully");
+      console.log(`Calendar sync completed: ${processedCount} events processed, ${skippedCount} skipped`);
     } catch (error) {
       console.error("Calendar sync failed:", error);
     } finally {

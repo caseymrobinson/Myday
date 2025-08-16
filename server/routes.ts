@@ -218,6 +218,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to save calendar URL" });
     }
   });
+
+  app.delete("/api/calendar/url", async (req, res) => {
+    try {
+      await calendarService.removeCalendar();
+      res.json({ success: true, message: "Calendar removed successfully" });
+    } catch (error) {
+      console.error("Failed to remove calendar:", error);
+      res.status(500).json({ message: "Failed to remove calendar" });
+    }
+  });
+
+  app.delete("/api/calendar/events", async (req, res) => {
+    try {
+      await storage.clearCalendarEvents();
+      res.json({ success: true, message: "Calendar events cleared successfully" });
+    } catch (error) {
+      console.error("Failed to clear calendar events:", error);
+      res.status(500).json({ message: "Failed to clear calendar events" });
+    }
+  });
+
+  app.post("/api/sync-calendar", async (req, res) => {
+    try {
+      await calendarService.syncCalendar();
+      res.json({ success: true, message: "Calendar synced successfully" });
+    } catch (error) {
+      console.error("Failed to sync calendar:", error);
+      res.status(500).json({ message: "Failed to sync calendar" });
+    }
+  });
   
   // Slack ingest endpoint (stub)
   app.post("/api/ingest/slack", async (req, res) => {

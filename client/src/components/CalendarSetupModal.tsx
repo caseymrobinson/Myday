@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, AlertCircle, Check } from "lucide-react";
+import { Calendar, AlertCircle, Check, Trash2, RefreshCw } from "lucide-react";
 
 interface CalendarSetupModalProps {
   open: boolean;
@@ -44,6 +45,50 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
       toast({ 
         title: "Failed to connect calendar", 
         description: "Please check your URL and try again",
+        variant: "destructive" 
+      });
+    }
+  });
+
+  const removeCalendarMutation = useMutation({
+    mutationFn: api.removeCalendar,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/calendar/url'] });
+      setCalendarUrl("");
+      toast({ title: "Calendar removed successfully" });
+    },
+    onError: () => {
+      toast({ 
+        title: "Failed to remove calendar",
+        variant: "destructive" 
+      });
+    }
+  });
+
+  const clearEventsMutation = useMutation({
+    mutationFn: api.clearCalendarEvents,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      toast({ title: "Calendar events cleared successfully" });
+    },
+    onError: () => {
+      toast({ 
+        title: "Failed to clear calendar events",
+        variant: "destructive" 
+      });
+    }
+  });
+
+  const syncCalendarMutation = useMutation({
+    mutationFn: api.syncCalendar,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      toast({ title: "Calendar synced successfully" });
+    },
+    onError: () => {
+      toast({ 
+        title: "Failed to sync calendar",
         variant: "destructive" 
       });
     }
@@ -133,6 +178,64 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
             </Button>
           </div>
         </form>
+
+        {existingUrl?.url && (
+          <>
+            <Separator className="bg-gray-700" />
+            
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-medium text-gray-300 mb-3">Calendar Management</h4>
+                <div className="grid grid-cols-1 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => syncCalendarMutation.mutate()}
+                    disabled={syncCalendarMutation.isPending}
+                    className="border-gray-700 text-gray-300 hover:bg-gray-800 justify-start"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${syncCalendarMutation.isPending ? 'animate-spin' : ''}`} />
+                    {syncCalendarMutation.isPending ? "Syncing..." : "Force Sync"}
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => clearEventsMutation.mutate()}
+                    disabled={clearEventsMutation.isPending}
+                    className="border-gray-700 text-gray-300 hover:bg-gray-800 justify-start"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    {clearEventsMutation.isPending ? "Clearing..." : "Clear Events Only"}
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeCalendarMutation.mutate()}
+                    disabled={removeCalendarMutation.isPending}
+                    className="border-red-600 text-red-400 hover:bg-red-900/20 justify-start"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    {removeCalendarMutation.isPending ? "Removing..." : "Remove Calendar"}
+                  </Button>
+                </div>
+              </div>
+              
+              <Alert className="bg-gray-800 border-gray-700">
+                <AlertCircle className="h-4 w-4 text-yellow-400" />
+                <AlertDescription className="text-gray-300 text-xs">
+                  <strong>Force Sync:</strong> Manually refresh calendar events<br/>
+                  <strong>Clear Events:</strong> Remove all events but keep calendar connected<br/>
+                  <strong>Remove Calendar:</strong> Disconnect calendar and clear all events
+                </AlertDescription>
+              </Alert>
+            </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
