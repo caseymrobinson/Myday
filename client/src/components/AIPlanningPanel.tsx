@@ -48,12 +48,19 @@ export function AIPlanningPanel({ selectedDate }: { selectedDate: string }) {
         confirmed: true
       });
       
+      // Update task status to confirmed
+      await apiRequest('PATCH', `/api/tasks/${suggestion.taskId}`, {
+        status: 'confirmed'
+      });
+      
       toast({
         title: "Task Scheduled",
         description: `${suggestion.taskTitle} has been added to your calendar`,
       });
       
+      // Invalidate both agenda and tasks to refresh everything
       queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
       
       // Remove accepted suggestion from the list
       setAiPlan((prev: any) => ({
@@ -160,11 +167,21 @@ export function AIPlanningPanel({ selectedDate }: { selectedDate: string }) {
               )}
 
               {/* Unscheduled Tasks */}
-              {aiPlan.unscheduledTasks?.length > 0 && (
+              {aiPlan.unscheduledTasks?.length > 0 && aiPlan.suggestions?.length === 0 && (
                 <div className="space-y-2">
-                  <h3 className="font-semibold text-sm text-gray-700">Could Not Schedule</h3>
-                  {aiPlan.unscheduledTasks.map((task: any) => (
-                    <div key={task.taskId} className="p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm text-gray-700">Could Not Schedule</h3>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setAiPlan({...aiPlan, unscheduledTasks: []})}
+                      className="text-xs"
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                  {aiPlan.unscheduledTasks.map((task: any, index: number) => (
+                    <div key={`unscheduled-${task.taskId}-${index}`} className="p-2 bg-yellow-50 border border-yellow-200 rounded-md">
                       <div className="flex items-start gap-2">
                         <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
                         <div className="flex-1">

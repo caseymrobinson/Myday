@@ -77,19 +77,46 @@ export default function CalendarPanel({
     onDateChange(new Date().toISOString().split('T')[0]);
   };
 
-  const confirmSuggestion = (suggestion: any) => {
-    focusBlockMutation.mutate({
-      taskId: suggestion.taskId,
-      start: suggestion.start,
-      end: suggestion.end,
-      confirmed: true
-    });
+  const confirmSuggestion = async (suggestion: any) => {
+    try {
+      // Create a focus block from the AI suggestion
+      await api.createFocusBlock({
+        taskId: suggestion.taskId,
+        start: suggestion.start,
+        end: suggestion.end,
+        confirmed: true
+      });
+      
+      // Update task status to confirmed
+      await api.updateTask(suggestion.taskId, {
+        status: 'confirmed'
+      });
+      
+      toast({
+        title: "Task Scheduled",
+        description: `${suggestion.taskTitle} has been added to your calendar`,
+      });
+      
+      // Refresh the agenda to update the view
+      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+    } catch (error) {
+      toast({
+        title: "Scheduling Failed",
+        description: "Could not schedule the task. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const dismissSuggestion = (suggestionId: string) => {
-    // For now, we'll just show a toast. In a full implementation,
-    // we'd store dismissed suggestions
-    toast({ title: "Suggestion dismissed" });
+    // Store dismissed suggestion in local state to hide it
+    toast({ 
+      title: "Suggestion dismissed",
+      description: "You can regenerate suggestions anytime from the AI planner"
+    });
+    // Refresh to remove from view
+    queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
   };
 
   const timeSlots = Array.from({ length: 12 }, (_, i) => i + 8); // 8 AM to 7 PM

@@ -15,9 +15,16 @@ export class OpenAIService {
     }
 
     try {
-      // Get calendar events and tasks
-      const meetings = await calendarService.getEventsForDate(date);
-      const freeBlocks = await schedulerService.getFreeTimeSlots(date);
+      // Get calendar events and tasks for multiple days
+      const today = new Date(date);
+      const tomorrow = new Date(date);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const meetingsToday = await calendarService.getEventsForDate(date);
+      const freeBlocksToday = await schedulerService.getFreeTimeSlots(date);
+      const meetingsTomorrow = await calendarService.getEventsForDate(tomorrow.toISOString().split('T')[0]);
+      const freeBlocksTomorrow = await schedulerService.getFreeTimeSlots(tomorrow.toISOString().split('T')[0]);
+      
       const tasks = await storage.getTasks();
       
       // Filter pending tasks
@@ -27,8 +34,10 @@ export class OpenAIService {
         date,
         totalTasks: tasks.length,
         pendingTasks: pendingTasks.length,
-        meetings: meetings.length,
-        freeBlocks: freeBlocks.length
+        meetingsToday: meetingsToday.length,
+        freeBlocksToday: freeBlocksToday.length,
+        meetingsTomorrow: meetingsTomorrow.length,
+        freeBlocksTomorrow: freeBlocksTomorrow.length
       });
       
       if (pendingTasks.length === 0) {
@@ -40,30 +49,32 @@ export class OpenAIService {
         };
       }
       
-      // Build prompt for AI
-      const prompt = `You are an intelligent day planner. Given the following calendar events and tasks, create an optimal schedule for the day.
+      // Build prompt for AI with multi-day support
+      const prompt = `You are an intelligent day planner. Given the following calendar events and tasks, create an optimal schedule.
 
 Current Date: ${date}
 Current Time: ${new Date().toISOString()}
 
-CALENDAR EVENTS (Fixed, cannot be moved):
-${meetings.map((m: any) => `- ${m.title}: ${m.start} to ${m.end}`).join('\n')}
+TODAY'S CALENDAR (${date}):
+Meetings (Fixed): ${meetingsToday.length > 0 ? meetingsToday.map((m: any) => `\n  - ${m.title}: ${m.start} to ${m.end}`).join('') : '\n  - No meetings'}
+Free Time Blocks: ${freeBlocksToday.length > 0 ? freeBlocksToday.map((b: any) => `\n  - ${b.start} to ${b.end}`).join('') : '\n  - No free time today'}
 
-AVAILABLE FREE TIME BLOCKS:
-${freeBlocks.map((b: any) => `- ${b.start} to ${b.end}`).join('\n')}
+TOMORROW'S CALENDAR (${tomorrow.toISOString().split('T')[0]}):
+Meetings (Fixed): ${meetingsTomorrow.length > 0 ? meetingsTomorrow.map((m: any) => `\n  - ${m.title}: ${m.start} to ${m.end}`).join('') : '\n  - No meetings'}
+Free Time Blocks: ${freeBlocksTomorrow.length > 0 ? freeBlocksTomorrow.map((b: any) => `\n  - ${b.start} to ${b.end}`).join('') : '\n  - No free time tomorrow'}
 
 TASKS TO SCHEDULE:
-${pendingTasks.map((t: any) => `- ID: ${t.id}, Title: ${t.title}: Priority ${t.priority}, ${t.estimateMins || 30} mins estimated${t.dueAt ? `, Due: ${t.dueAt}` : ''}`).join('\n')}
+${pendingTasks.map((t: any) => `- ID: ${t.id}, Title: ${t.title}, Priority ${t.priority}, Duration: ${t.estimateMins || 30} mins${t.dueAt ? `, Due: ${t.dueAt}` : ''}`).join('\n')}
 
-INSTRUCTIONS:
-1. ONLY schedule tasks between 9:00 AM and 5:00 PM (business hours)
-2. Schedule high priority tasks first
-3. Consider task deadlines - tasks due today or tomorrow should be scheduled sooner
-4. If no duration is specified, estimate based on task complexity (simple tasks: 15-30 mins, medium: 30-60 mins, complex: 60-120 mins)
-5. Leave buffer time between tasks for breaks
-6. Don't schedule tasks during existing calendar events
-7. Prefer morning hours for complex/important tasks
-8. Group similar tasks together when possible
+CRITICAL INSTRUCTIONS:
+1. STRICTLY schedule tasks ONLY between 9:00 AM and 5:00 PM (business hours)
+2. All start/end times MUST be within business hours (9 AM - 5 PM)
+3. If today's business hours are full, schedule for tomorrow's business hours
+4. Schedule high priority (3) tasks first, then medium (2), then low (1)
+5. Tasks due today/tomorrow get scheduling priority
+6. Never schedule during existing meetings
+7. Leave 5-10 minute buffers between tasks
+8. If a task cannot fit today, try tomorrow before marking as unscheduled
 
 Return a JSON object with this structure:
 {

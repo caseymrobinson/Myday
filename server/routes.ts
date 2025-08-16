@@ -108,11 +108,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get AI scheduling suggestions
       const suggestions = await schedulerService.generateScheduleSuggestions(date);
       
+      // Remove duplicate suggestions (same taskId)
+      const uniqueSuggestions = suggestions.reduce((acc: any[], curr: any) => {
+        if (!acc.find(s => s.taskId === curr.taskId)) {
+          acc.push(curr);
+        }
+        return acc;
+      }, []);
+      
       const agendaResponse: AgendaResponse = {
         meetings,
         freeBlocks,
         topTasks,
-        suggestions
+        suggestions: uniqueSuggestions
       };
       
       res.json(agendaResponse);
