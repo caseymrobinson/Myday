@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import TasksPanel from "@/components/TasksPanel";
 import CalendarPanel from "@/components/CalendarPanel";
@@ -7,20 +7,43 @@ import ChatPanel from "@/components/ChatPanel";
 import AddTaskModal from "@/components/AddTaskModal";
 import CalendarSetupModal from "@/components/CalendarSetupModal";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { Bot } from "lucide-react";
 
 export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showCalendarSetup, setShowCalendarSetup] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
-    queryKey: ['/api/tasks']
+    queryKey: ['/api/tasks'],
+    queryFn: api.getTasks
   });
 
   const { data: agenda } = useQuery({
-    queryKey: ['/api/agenda']
+    queryKey: ['/api/agenda'],
+    queryFn: () => api.getAgenda()
   });
+
+  const planDayMutation = useMutation({
+    mutationFn: ({ message, history }: { message: string; history: Array<{role: string, content: string}> }) => 
+      api.sendMessage(message, history || []),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      toast({ title: "AI is planning your day..." });
+      setShowChat(true); // Open chat to show the response
+    },
+    onError: () => {
+      toast({ title: "Failed to plan day", variant: "destructive" });
+    }
+  });
+
+  const handlePlanDay = () => {
+    const message = "Help me plan my day by scheduling my tasks into my calendar based on my meetings and available time blocks";
+    planDayMutation.mutate({ message, history: [] });
+  };
 
   return (
     <div className="h-screen bg-black flex">
@@ -33,14 +56,20 @@ export default function Dashboard() {
             isLoading={tasksLoading}
             onAddTask={() => setShowAddTask(true)}
             onSetupCalendar={() => setShowCalendarSetup(true)}
+            onPlanDay={handlePlanDay}
           />
         </div>
 
         {/* Calendar Panel - Center/Right */}
         <div className="flex-1">
           <CalendarPanel 
-            events={agenda?.meetings || []}
+            events={agenda?.meetings ? agenda.meetings.map(meeting => ({
+              ...meeting,
+              start: new Date(meeting.start),
+              end: new Date(meeting.end)
+            })) : []}
             focusBlocks={[]}
+            onOpenChat={() => setShowChat(true)}
           />
         </div>
 

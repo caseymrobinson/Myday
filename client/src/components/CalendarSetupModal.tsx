@@ -33,7 +33,7 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
   }, [existingUrl]);
 
   const setCalendarMutation = useMutation({
-    mutationFn: (url: string) => api.setCalendarUrl(url),
+    mutationFn: (url: string) => api.setupCalendar(url),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
       queryClient.invalidateQueries({ queryKey: ['/api/calendar/url'] });

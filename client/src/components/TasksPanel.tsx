@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import type { Task } from "../types";
-import { Plus, Edit2, Check, X, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Edit2, Check, X, Trash2, Settings } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -17,9 +17,10 @@ interface TasksPanelProps {
   isLoading: boolean;
   onAddTask: () => void;
   onSetupCalendar: () => void;
+  onPlanDay: () => void;
 }
 
-export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalendar }: TasksPanelProps) {
+export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalendar, onPlanDay }: TasksPanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -29,19 +30,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
     estimateMins: 30
   });
 
-  // Get current date and time
-  const currentDate = new Date();
-  const dateString = currentDate.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
-  const timeString = currentDate.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
-  });
+  // Remove date/time logic - now handled by CalendarPanel
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: any }) => 
@@ -129,34 +118,15 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
         <h1 className="text-xl font-semibold text-white">My tasks</h1>
         
-        <div className="flex items-center gap-2 text-gray-400 text-sm">
-          <span>{dateString}</span>
-          <span className="text-gray-600">•</span>
-          <span>{timeString}</span>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="ghost" 
-            size="icon"
-            className="text-gray-400 hover:text-white hover:bg-gray-800"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="outline"
-            className="bg-primary hover:bg-primary/90 text-white border-0"
-          >
-            Today
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            className="text-gray-400 hover:text-white hover:bg-gray-800"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={onSetupCalendar}
+          className="text-gray-400 hover:text-white hover:bg-gray-800"
+          data-testid="button-settings"
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Action Buttons */}
@@ -170,7 +140,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
           Create New Task
         </Button>
         <Button 
-          onClick={onSetupCalendar}
+          onClick={onPlanDay}
           variant="outline"
           className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white"
           data-testid="button-plan-day"

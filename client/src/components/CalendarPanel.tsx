@@ -1,17 +1,24 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import type { CalendarEvent, FocusBlock } from "../types";
-import { Bot, MoreVertical } from "lucide-react";
+import { Bot, MoreVertical, ChevronLeft, ChevronRight, Send } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface CalendarPanelProps {
   events: CalendarEvent[];
   focusBlocks: FocusBlock[];
+  onOpenChat: () => void;
 }
 
-export default function CalendarPanel({ events, focusBlocks }: CalendarPanelProps) {
+export default function CalendarPanel({ events, focusBlocks, onOpenChat }: CalendarPanelProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [chatInput, setChatInput] = useState("");
+  const { toast } = useToast();
 
   // Update current time every minute
   useEffect(() => {
@@ -20,6 +27,43 @@ export default function CalendarPanel({ events, focusBlocks }: CalendarPanelProp
     }, 60000);
     return () => clearInterval(timer);
   }, []);
+
+  // Get current date and time for header
+  const dateString = currentTime.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  const timeString = currentTime.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: ({ message, history }: { message: string; history: Array<{role: string, content: string}> }) => 
+      api.sendMessage(message, history || []),
+    onSuccess: () => {
+      setChatInput("");
+      toast({ title: "Message sent to AI assistant" });
+      // Optionally open chat panel to show response
+      onOpenChat();
+    },
+    onError: () => {
+      toast({ title: "Failed to send message", variant: "destructive" });
+    }
+  });
+
+  const handleQuickMessage = (message: string) => {
+    sendMessageMutation.mutate({ message, history: [] });
+  };
+
+  const handleChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    handleQuickMessage(chatInput);
+  };
 
   // Generate hour slots for the day
   const hours = Array.from({ length: 24 }, (_, i) => {
@@ -62,6 +106,38 @@ export default function CalendarPanel({ events, focusBlocks }: CalendarPanelProp
 
   return (
     <div className="flex flex-col h-full bg-black border-l border-gray-800">
+      {/* Header with Date/Time */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+        <div className="flex items-center gap-2 text-gray-400 text-sm">
+          <span className="text-white text-xl font-semibold">{dateString}</span>
+          <span className="text-gray-600">•</span>
+          <span>{timeString}</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="ghost" 
+            size="icon"
+            className="text-gray-400 hover:text-white hover:bg-gray-800"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="outline"
+            className="bg-primary hover:bg-primary/90 text-white border-0"
+          >
+            Today
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon"
+            className="text-gray-400 hover:text-white hover:bg-gray-800"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
       {/* Legend */}
       <div className="px-6 py-4 border-b border-gray-800">
         <div className="flex items-center justify-between">
@@ -128,38 +204,70 @@ export default function CalendarPanel({ events, focusBlocks }: CalendarPanelProp
         </div>
       </ScrollArea>
 
-      {/* Chat Bubble */}
+      {/* Interactive Chat Bubble */}
       <div className="p-4 border-t border-gray-800">
         <div className="bg-gray-900 rounded-2xl p-4 relative">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <p className="text-gray-300 text-sm mb-3">Ask me about my schedule</p>
+              {/* Interactive Input */}
+              <form onSubmit={handleChatSubmit} className="relative mb-3">
+                <Input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask me about my schedule"
+                  className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 pr-10 rounded-lg"
+                  disabled={sendMessageMutation.isPending}
+                  data-testid="schedule-chat-input"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  disabled={!chatInput.trim() || sendMessageMutation.isPending}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 bg-purple-500 hover:bg-purple-600 text-white rounded h-7 w-7"
+                >
+                  <Send className="h-3 w-3" />
+                </Button>
+              </form>
+              
+              {/* Quick Action Buttons */}
               <div className="flex gap-2 flex-wrap">
                 <Button 
                   size="sm" 
                   variant="secondary"
+                  onClick={() => handleQuickMessage("I need to create a task")}
+                  disabled={sendMessageMutation.isPending}
                   className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                  data-testid="quick-create-task"
                 >
                   Create task
                 </Button>
                 <Button 
                   size="sm" 
                   variant="secondary"
+                  onClick={() => handleQuickMessage("When is my next meeting?")}
+                  disabled={sendMessageMutation.isPending}
                   className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                  data-testid="quick-next-meeting"
                 >
                   Next meeting
                 </Button>
                 <Button 
                   size="sm" 
                   variant="secondary"
+                  onClick={() => handleQuickMessage("Book focus time for me")}
+                  disabled={sendMessageMutation.isPending}
                   className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                  data-testid="quick-book-focus"
                 >
                   Book focus time
                 </Button>
                 <Button 
                   size="sm" 
                   variant="secondary"
+                  onClick={() => handleQuickMessage("Help me prioritize my tasks")}
+                  disabled={sendMessageMutation.isPending}
                   className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                  data-testid="quick-prioritize"
                 >
                   Prioritize?
                 </Button>
@@ -169,7 +277,9 @@ export default function CalendarPanel({ events, focusBlocks }: CalendarPanelProp
               <Button
                 size="icon"
                 variant="ghost"
+                onClick={onOpenChat}
                 className="h-10 w-10 rounded-full bg-purple-500 hover:bg-purple-600 text-white"
+                data-testid="button-open-chat-panel"
               >
                 <Bot className="h-5 w-5" />
               </Button>
