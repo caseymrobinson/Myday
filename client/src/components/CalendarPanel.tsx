@@ -214,15 +214,14 @@ export default function CalendarPanel({
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-              <span className="text-lg font-medium text-gray-700" data-testid="text-current-date">
-                {formatted.full}
+            <span className="text-lg font-medium text-gray-700" data-testid="text-current-date">
+              {formatted.full}
+            </span>
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <span>Current Time:</span>
+              <span className="font-mono font-medium" data-testid="text-current-time">
+                {currentTime}
               </span>
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <span>Current Time:</span>
-                <span className="font-mono font-medium" data-testid="text-current-time">
-                  {currentTime}
-                </span>
-              </div>
             </div>
           </div>
           <div className="flex items-center space-x-2">
