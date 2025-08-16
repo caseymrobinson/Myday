@@ -15,11 +15,8 @@ export function AIPlanningPanel({ selectedDate }: { selectedDate: string }) {
   
   const planDayMutation = useMutation({
     mutationFn: async (date: string) => {
-      return apiRequest('/api/ai/plan-day', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date })
-      });
+      const response = await apiRequest('POST', '/api/ai/plan-day', { date });
+      return response.json();
     },
     onSuccess: (data) => {
       setAiPlan(data);
@@ -41,15 +38,11 @@ export function AIPlanningPanel({ selectedDate }: { selectedDate: string }) {
   const acceptSuggestion = async (suggestion: any) => {
     try {
       // Create a focus block from the AI suggestion
-      await apiRequest('/api/focus-blocks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId: suggestion.taskId,
-          start: suggestion.start,
-          end: suggestion.end,
-          confirmed: true
-        })
+      await apiRequest('POST', '/api/focus-blocks', {
+        taskId: suggestion.taskId,
+        start: suggestion.start,
+        end: suggestion.end,
+        confirmed: true
       });
       
       toast({
