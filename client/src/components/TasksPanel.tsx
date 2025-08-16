@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import type { Task } from "../types";
-import { Plus, Edit2, Check, X, Trash2, Settings } from "lucide-react";
+import { Plus, Edit2, Check, X, Trash2, Settings, Bot } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -115,22 +115,12 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
   return (
     <div className="flex flex-col h-full bg-black">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+      <div className="px-6 py-4 bg-gray-900">
         <h1 className="text-xl font-semibold text-white">My tasks</h1>
-        
-        <Button 
-          variant="ghost" 
-          size="icon"
-          onClick={onSetupCalendar}
-          className="text-gray-400 hover:text-white hover:bg-gray-800"
-          data-testid="button-settings"
-        >
-          <Settings className="h-4 w-4" />
-        </Button>
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-3 px-6 py-4">
+      <div className="flex gap-3 px-6 py-4 bg-gray-950">
         <Button 
           onClick={onAddTask}
           className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2"
@@ -141,16 +131,25 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
         </Button>
         <Button 
           onClick={onPlanDay}
-          variant="outline"
-          className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white"
+          className="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white flex items-center gap-2"
           data-testid="button-plan-day"
         >
-          📅 Plan My Day
+          <Bot className="h-4 w-4" />
+          Plan My Day
+        </Button>
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={onSetupCalendar}
+          className="text-gray-400 hover:text-white hover:bg-gray-700"
+          data-testid="button-settings"
+        >
+          <Settings className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Tasks Container */}
-      <div className="flex-1 overflow-y-auto px-6">
+      <div className="flex-1 overflow-y-auto px-6 bg-black">
         {isLoading ? (
           <div className="flex items-center justify-center h-32">
             <div className="text-gray-500">Loading tasks...</div>

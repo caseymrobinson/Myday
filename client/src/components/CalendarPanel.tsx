@@ -13,29 +13,23 @@ interface CalendarPanelProps {
   events: CalendarEvent[];
   focusBlocks: FocusBlock[];
   onOpenChat: () => void;
+  selectedDate: Date;
+  onDateChange: (date: Date) => void;
 }
 
-export default function CalendarPanel({ events, focusBlocks, onOpenChat }: CalendarPanelProps) {
-  const [currentTime, setCurrentTime] = useState(new Date());
+export default function CalendarPanel({ events, focusBlocks, onOpenChat, selectedDate, onDateChange }: CalendarPanelProps) {
   const [chatInput, setChatInput] = useState("");
   const { toast } = useToast();
 
-  // Update current time every minute
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
-
   // Get current date and time for header
-  const dateString = currentTime.toLocaleDateString('en-US', { 
+  const currentDate = selectedDate || new Date();
+  const dateString = currentDate.toLocaleDateString('en-US', { 
     weekday: 'long', 
     year: 'numeric', 
     month: 'long', 
     day: 'numeric' 
   });
-  const timeString = currentTime.toLocaleTimeString('en-US', { 
+  const timeString = new Date().toLocaleTimeString('en-US', { 
     hour: 'numeric', 
     minute: '2-digit',
     hour12: true 
@@ -101,13 +95,15 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat }: Calen
     return { calendarEvent, focusBlock };
   };
 
-  // Get current hour for highlighting
-  const currentHour = currentTime.getHours();
+  // Get current hour for highlighting (only if viewing today)
+  const now = new Date();
+  const isToday = currentDate.toDateString() === now.toDateString();
+  const currentHour = isToday ? now.getHours() : -1;
 
   return (
-    <div className="flex flex-col h-full bg-black border-l border-gray-800">
+    <div className="flex flex-col h-full bg-black">
       {/* Header with Date/Time */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+      <div className="flex items-center justify-between px-6 py-4 bg-gray-900">
         <div className="flex items-center gap-2 text-gray-400 text-sm">
           <span className="text-white text-xl font-semibold">{dateString}</span>
           <span className="text-gray-600">•</span>
@@ -118,20 +114,30 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat }: Calen
           <Button 
             variant="ghost" 
             size="icon"
-            className="text-gray-400 hover:text-white hover:bg-gray-800"
+            onClick={() => {
+              const newDate = new Date(currentDate);
+              newDate.setDate(newDate.getDate() - 1);
+              onDateChange(newDate);
+            }}
+            className="text-gray-400 hover:text-white hover:bg-gray-700"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button 
-            variant="outline"
-            className="bg-primary hover:bg-primary/90 text-white border-0"
+            onClick={() => onDateChange(new Date())}
+            className="bg-primary hover:bg-primary/90 text-white"
           >
             Today
           </Button>
           <Button 
             variant="ghost" 
             size="icon"
-            className="text-gray-400 hover:text-white hover:bg-gray-800"
+            onClick={() => {
+              const newDate = new Date(currentDate);
+              newDate.setDate(newDate.getDate() + 1);
+              onDateChange(newDate);
+            }}
+            className="text-gray-400 hover:text-white hover:bg-gray-700"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -139,7 +145,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat }: Calen
       </div>
 
       {/* Legend */}
-      <div className="px-6 py-4 border-b border-gray-800">
+      <div className="px-6 py-4 bg-gray-950">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 text-xs">
             <div className="flex items-center gap-2">
@@ -159,7 +165,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat }: Calen
       </div>
 
       {/* Calendar Grid */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 bg-black">
         <div className="px-6">
           {hours.map((hour) => {
             const { calendarEvent, focusBlock } = getEventAtHour(hour.hour24);
@@ -168,7 +174,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat }: Calen
             return (
               <div 
                 key={hour.hour24} 
-                className={`relative h-16 border-b border-gray-900 ${isCurrentHour ? 'bg-gray-900/50' : ''}`}
+                className={`relative h-16 ${isCurrentHour ? 'bg-gray-900/50' : 'hover:bg-gray-950/50'}`}
               >
                 {/* Hour label */}
                 <span className="absolute -top-2 left-0 text-xs text-gray-600">
@@ -205,7 +211,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat }: Calen
       </ScrollArea>
 
       {/* Interactive Chat Bubble */}
-      <div className="p-4 border-t border-gray-800">
+      <div className="p-4 bg-gray-950">
         <div className="bg-gray-900 rounded-2xl p-4 relative">
           <div className="flex items-start justify-between">
             <div className="flex-1">
