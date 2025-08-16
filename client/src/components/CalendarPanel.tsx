@@ -205,7 +205,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
   return (
     <div className="flex flex-col h-full bg-black">
       {/* Header with Date/Time */}
-      <div className="flex items-center justify-between px-6 py-4 bg-gray-900">
+      <div className="flex items-center justify-between px-6 py-4 bg-[#1e1e1e]">
         <div className="flex items-center gap-2 text-gray-400 text-sm">
           <span className="text-white text-xl font-semibold">{dateString}</span>
           <span className="text-gray-600">•</span>
@@ -328,7 +328,6 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           })}
         </div>
       </ScrollArea>
-      
       {/* Interactive Chat Bubble - Only show when chat panel is closed */}
       {!showChat && (
         <div className="p-4 bg-gray-950 flex justify-center">
