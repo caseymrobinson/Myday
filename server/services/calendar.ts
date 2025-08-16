@@ -18,14 +18,40 @@ export class CalendarService {
   private isRunning = false;
 
   constructor() {
-    this.icsUrl = process.env.ICS_URL || null;
+    this.icsUrl = null;
+    this.initializeCalendarUrl();
     this.startCronJob();
   }
 
-  setIcsUrl(url: string) {
+  private async initializeCalendarUrl() {
+    // Try to load URL from database settings first, then fall back to env
+    try {
+      const storedUrl = await storage.getSetting('calendar_url');
+      if (storedUrl) {
+        this.icsUrl = storedUrl;
+        console.log('Loaded calendar URL from database');
+      } else if (process.env.ICS_URL) {
+        this.icsUrl = process.env.ICS_URL;
+        // Save it to the database for persistence
+        await storage.setSetting('calendar_url', this.icsUrl);
+        console.log('Loaded calendar URL from environment and saved to database');
+      }
+    } catch (error) {
+      console.error('Failed to initialize calendar URL:', error);
+      this.icsUrl = process.env.ICS_URL || null;
+    }
+  }
+
+  async setIcsUrl(url: string) {
     this.icsUrl = url;
+    // Save to database for persistence
+    await storage.setSetting('calendar_url', url);
     // Trigger immediate sync after setting URL
     this.syncCalendar();
+  }
+  
+  getIcsUrl(): string | null {
+    return this.icsUrl;
   }
 
   private startCronJob() {

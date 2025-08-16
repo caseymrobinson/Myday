@@ -1,5 +1,7 @@
-import { type Task, type InsertTask, type FocusBlock, type InsertFocusBlock, type CalendarEvent, type InsertCalendarEvent } from "@shared/schema";
+import { type Task, type InsertTask, type FocusBlock, type InsertFocusBlock, type CalendarEvent, type InsertCalendarEvent, type Setting, type InsertSetting, tasks, focusBlocks, calendarEvents, settings } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   // Tasks
@@ -23,6 +25,10 @@ export interface IStorage {
   updateCalendarEvent(id: string, updates: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined>;
   deleteCalendarEvent(id: string): Promise<boolean>;
   clearCalendarEvents(): Promise<void>;
+  
+  // Settings
+  getSetting(key: string): Promise<string | undefined>;
+  setSetting(key: string, value: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -230,6 +236,124 @@ export class MemStorage implements IStorage {
   async clearCalendarEvents(): Promise<void> {
     this.calendarEvents.clear();
   }
+  
+  // Settings (in-memory storage doesn't persist)
+  private settings: Map<string, string> = new Map();
+  
+  async getSetting(key: string): Promise<string | undefined> {
+    return this.settings.get(key);
+  }
+  
+  async setSetting(key: string, value: string): Promise<void> {
+    this.settings.set(key, value);
+  }
 }
 
-export const storage = new MemStorage();
+// Database Storage Implementation
+export class DatabaseStorage implements IStorage {
+  // Tasks
+  async getTasks(): Promise<Task[]> {
+    return await db.select().from(tasks);
+  }
+
+  async getTask(id: string): Promise<Task | undefined> {
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    return task;
+  }
+
+  async createTask(insertTask: InsertTask): Promise<Task> {
+    const [task] = await db.insert(tasks).values(insertTask).returning();
+    return task;
+  }
+
+  async updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined> {
+    const [task] = await db.update(tasks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(tasks.id, id))
+      .returning();
+    return task;
+  }
+
+  async deleteTask(id: string): Promise<boolean> {
+    const result = await db.delete(tasks).where(eq(tasks.id, id));
+    return true;
+  }
+
+  // Focus Blocks
+  async getFocusBlocks(): Promise<FocusBlock[]> {
+    return await db.select().from(focusBlocks);
+  }
+
+  async getFocusBlock(id: string): Promise<FocusBlock | undefined> {
+    const [block] = await db.select().from(focusBlocks).where(eq(focusBlocks.id, id));
+    return block;
+  }
+
+  async createFocusBlock(insertBlock: InsertFocusBlock): Promise<FocusBlock> {
+    const [block] = await db.insert(focusBlocks).values(insertBlock).returning();
+    return block;
+  }
+
+  async updateFocusBlock(id: string, updates: Partial<InsertFocusBlock>): Promise<FocusBlock | undefined> {
+    const [block] = await db.update(focusBlocks)
+      .set(updates)
+      .where(eq(focusBlocks.id, id))
+      .returning();
+    return block;
+  }
+
+  async deleteFocusBlock(id: string): Promise<boolean> {
+    await db.delete(focusBlocks).where(eq(focusBlocks.id, id));
+    return true;
+  }
+
+  // Calendar Events
+  async getCalendarEvents(): Promise<CalendarEvent[]> {
+    return await db.select().from(calendarEvents);
+  }
+
+  async getCalendarEvent(id: string): Promise<CalendarEvent | undefined> {
+    const [event] = await db.select().from(calendarEvents).where(eq(calendarEvents.id, id));
+    return event;
+  }
+
+  async createCalendarEvent(insertEvent: InsertCalendarEvent): Promise<CalendarEvent> {
+    const [event] = await db.insert(calendarEvents).values(insertEvent).returning();
+    return event;
+  }
+
+  async updateCalendarEvent(id: string, updates: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined> {
+    const [event] = await db.update(calendarEvents)
+      .set({ ...updates, lastSync: new Date() })
+      .where(eq(calendarEvents.id, id))
+      .returning();
+    return event;
+  }
+
+  async deleteCalendarEvent(id: string): Promise<boolean> {
+    await db.delete(calendarEvents).where(eq(calendarEvents.id, id));
+    return true;
+  }
+
+  async clearCalendarEvents(): Promise<void> {
+    await db.delete(calendarEvents);
+  }
+  
+  // Settings
+  async getSetting(key: string): Promise<string | undefined> {
+    const [setting] = await db.select().from(settings).where(eq(settings.key, key));
+    return setting?.value;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    await db.insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value, updatedAt: new Date() }
+      });
+  }
+}
+
+// Use database storage if DATABASE_URL is set, otherwise fall back to memory storage
+export const storage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();

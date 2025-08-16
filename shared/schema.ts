@@ -38,6 +38,12 @@ export const calendarEvents = pgTable("calendar_events", {
   lastSync: timestamp("last_sync").notNull().default(sql`now()`)
 });
 
+export const settings = pgTable("settings", {
+  key: varchar("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`)
+});
+
 export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
   createdAt: true,
@@ -53,12 +59,18 @@ export const insertCalendarEventSchema = createInsertSchema(calendarEvents).omit
   lastSync: true
 });
 
+export const insertSettingSchema = createInsertSchema(settings).omit({
+  updatedAt: true
+});
+
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 export type InsertFocusBlock = z.infer<typeof insertFocusBlockSchema>;
 export type FocusBlock = typeof focusBlocks.$inferSelect;
 export type InsertCalendarEvent = z.infer<typeof insertCalendarEventSchema>;
 export type CalendarEvent = typeof calendarEvents.$inferSelect;
+export type InsertSetting = z.infer<typeof insertSettingSchema>;
+export type Setting = typeof settings.$inferSelect;
 
 // API response types
 export const agendaResponseSchema = z.object({

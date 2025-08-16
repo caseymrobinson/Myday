@@ -154,14 +154,15 @@ Return a JSON object with this structure:
         return await this.generateAgendaSummary();
       }
 
-      // Check if message is about task extraction from Slack-like text
-      if (this.isTaskExtractionQuery(message)) {
-        return await this.extractTaskFromText(message);
+      // Check if message contains email content or asks for task extraction
+      if (this.isEmailContent(message) || this.isTaskExtractionQuery(message)) {
+        const result = await this.extractTasksFromEmail(message);
+        return result.summary;
       }
 
       // Generic conversation
       const response = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
@@ -172,7 +173,7 @@ Return a JSON object with this structure:
             content: message
           }
         ],
-        max_completion_tokens: 500
+        max_tokens: 500
       });
 
       return response.choices[0].message.content || "I couldn't process your request. Please try again.";
@@ -191,6 +192,26 @@ Return a JSON object with this structure:
       
       return "I'm having trouble processing your request right now. Please try again later.";
     }
+  }
+  
+  private isEmailContent(message: string): boolean {
+    // Check for common email patterns
+    const emailPatterns = [
+      /^(from:|to:|subject:|date:|sent:|re:|fw:|fwd:)/im,
+      /dear\s+\w+/i,
+      /sincerely|regards|best|thanks/i,
+      /please\s+(review|complete|follow up|respond|prepare|send|schedule)/i,
+      /action items?:|next steps?:|to.?do:/i
+    ];
+    
+    // Check if message is long enough to be an email
+    const isLongEnough = message.length > 200;
+    
+    // Check if it contains multiple lines (typical of emails)
+    const hasMultipleLines = message.split('\n').length > 3;
+    
+    return (isLongEnough || hasMultipleLines) && 
+           emailPatterns.some(pattern => pattern.test(message));
   }
 
   private isScheduleQuery(message: string): boolean {
@@ -273,7 +294,7 @@ Format the response as a friendly, conversational summary that includes:
 Keep it concise but comprehensive.`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
@@ -284,7 +305,7 @@ Keep it concise but comprehensive.`;
             content: prompt
           }
         ],
-        max_completion_tokens: 600
+        max_tokens: 600
       });
 
       return response.choices[0].message.content || "I couldn't generate your agenda summary.";
@@ -301,55 +322,83 @@ Keep it concise but comprehensive.`;
   }
 
   private async extractTaskFromText(message: string): Promise<string> {
+    return "Please use the new task extraction feature. Simply paste your email or text and I'll extract all action items for you.";
+  }
+  
+  async extractTasksFromEmail(emailContent: string): Promise<{ tasks: any[], summary: string }> {
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: `You are a task extraction expert. Extract actionable tasks from text messages. 
+            content: `You are a task extraction expert. Extract ALL actionable tasks from emails or text messages. 
             Return a JSON object with the following structure:
             {
-              "title": "concise task title",
-              "priority": 1-3 (1=low, 2=medium, 3=high),
-              "estimateMins": estimated minutes to complete,
-              "context": "additional context or notes"
+              "tasks": [
+                {
+                  "title": "concise task title",
+                  "priority": 1-3 (1=low, 2=medium, 3=high based on urgency/importance),
+                  "estimateMins": estimated minutes to complete,
+                  "context": "relevant context from the email",
+                  "dueAt": "ISO date string if a deadline is mentioned, otherwise null"
+                }
+              ],
+              "summary": "Brief summary of what was extracted"
             }
             
-            If no clear task can be extracted, return {"error": "No actionable task found"}`
+            Extract ALL action items, to-dos, follow-ups, and commitments mentioned.
+            If no tasks found, return {"tasks": [], "summary": "No actionable tasks found"}`
           },
           {
             role: "user",
-            content: `Extract a task from this message: ${message}`
+            content: `Extract all tasks from this text:\n\n${emailContent}`
           }
         ],
         response_format: { type: "json_object" },
-        max_completion_tokens: 300
+        max_tokens: 1000
       });
 
       const result = JSON.parse(response.choices[0].message.content || "{}");
       
-      if (result.error) {
-        return result.error;
+      if (!result.tasks || result.tasks.length === 0) {
+        return { 
+          tasks: [], 
+          summary: "No actionable tasks found in the provided text." 
+        };
       }
 
-      // Create the task
-      await storage.createTask({
-        title: result.title,
-        source: 'ai',
-        status: 'pending',
-        priority: result.priority || 2,
-        estimateMins: result.estimateMins || 30,
-        context: result.context ? { note: result.context } : null,
-        aiSuggested: true,
-        dueAt: null,
-        url: null
-      });
+      // Create all the tasks
+      const createdTasks = [];
+      for (const task of result.tasks) {
+        const createdTask = await storage.createTask({
+          title: task.title,
+          source: 'ai',
+          status: 'pending',
+          priority: task.priority || 2,
+          estimateMins: task.estimateMins || 30,
+          context: task.context ? { note: task.context, source: 'email' } : { source: 'email' },
+          aiSuggested: false,
+          dueAt: task.dueAt ? new Date(task.dueAt) : null,
+          url: null
+        });
+        createdTasks.push(createdTask);
+      }
 
-      return `I've extracted and created a new task: "${result.title}" with ${result.priority === 3 ? 'high' : result.priority === 2 ? 'medium' : 'low'} priority.`;
+      const taskSummary = createdTasks.map(t => 
+        `• ${t.title} (${t.priority === 3 ? 'High' : t.priority === 2 ? 'Medium' : 'Low'} priority${t.dueAt ? `, due ${new Date(t.dueAt).toLocaleDateString()}` : ''})`
+      ).join('\n');
+
+      return {
+        tasks: createdTasks,
+        summary: `I've successfully extracted and created ${createdTasks.length} task${createdTasks.length !== 1 ? 's' : ''}:\n\n${taskSummary}`
+      };
     } catch (error) {
-      console.error("Error extracting task:", error);
-      return "I couldn't extract a task from that message. Please try rephrasing it.";
+      console.error("Error extracting tasks:", error);
+      return {
+        tasks: [],
+        summary: "I couldn't extract tasks from that text. Please try again or check if the text contains action items."
+      };
     }
   }
 }

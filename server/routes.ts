@@ -169,6 +169,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Calendar setup endpoints
+  app.get("/api/calendar/url", async (req, res) => {
+    try {
+      const url = calendarService.getIcsUrl();
+      res.json({ url: url || null });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get calendar URL" });
+    }
+  });
+  
+  app.post("/api/calendar/url", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== 'string') {
+        res.status(400).json({ message: "Invalid URL provided" });
+        return;
+      }
+      
+      await calendarService.setIcsUrl(url);
+      res.json({ success: true, message: "Calendar URL saved successfully" });
+    } catch (error) {
+      console.error("Failed to save calendar URL:", error);
+      res.status(500).json({ message: "Failed to save calendar URL" });
+    }
+  });
+  
   // Slack ingest endpoint (stub)
   app.post("/api/ingest/slack", async (req, res) => {
     try {

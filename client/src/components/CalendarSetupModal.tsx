@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { X, Calendar, ExternalLink, Info } from "lucide-react";
@@ -18,6 +18,18 @@ export default function CalendarSetupModal({ onClose }: CalendarSetupModalProps)
   const [icsUrl, setIcsUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  
+  // Load existing calendar URL
+  const { data: calendarData } = useQuery({
+    queryKey: ['/api/calendar/url'],
+    queryFn: api.getCalendarUrl
+  });
+  
+  useEffect(() => {
+    if (calendarData?.url) {
+      setIcsUrl(calendarData.url);
+    }
+  }, [calendarData]);
 
   const syncCalendarMutation = useMutation({
     mutationFn: api.syncCalendar,

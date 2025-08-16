@@ -50,8 +50,13 @@ export const api = {
     return response.json();
   },
 
-  setupCalendar: async (icsUrl: string): Promise<{ message: string }> => {
-    const response = await apiRequest("POST", "/api/calendar/setup", { icsUrl });
+  setupCalendar: async (icsUrl: string): Promise<{ success: boolean; message: string }> => {
+    const response = await apiRequest("POST", "/api/calendar/url", { url: icsUrl });
+    return response.json();
+  },
+  
+  getCalendarUrl: async (): Promise<{ url: string | null }> => {
+    const response = await apiRequest("GET", "/api/calendar/url");
     return response.json();
   },
 
