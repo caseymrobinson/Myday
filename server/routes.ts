@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { calendarService } from "./services/calendar";
+import { calendarServiceV2 } from "./services/calendar-v2";
 import { schedulerService } from "./services/scheduler";
 import { openaiService } from "./services/openai";
 import { insertTaskSchema, insertFocusBlockSchema, chatMessageSchema, slackIngestSchema, type AgendaResponse } from "@shared/schema";
@@ -95,7 +95,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const date = req.query.date as string || new Date().toISOString().split('T')[0];
       
       // Get meetings for the date
-      const meetings = await calendarService.getEventsForDate(date);
+      const meetings = await calendarServiceV2.getEventsForDate(date);
       
       // Get free time blocks
       const freeBlocks = await schedulerService.getFreeTimeSlots(date);
@@ -196,7 +196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Calendar setup endpoints
   app.get("/api/calendar/url", async (req, res) => {
     try {
-      const url = calendarService.getIcsUrl();
+      const url = calendarServiceV2.getIcsUrl();
       res.json({ url: url || null });
     } catch (error) {
       res.status(500).json({ message: "Failed to get calendar URL" });
@@ -211,7 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
-      await calendarService.setIcsUrl(url);
+      await calendarServiceV2.setIcsUrl(url);
       res.json({ success: true, message: "Calendar URL saved successfully" });
     } catch (error) {
       console.error("Failed to save calendar URL:", error);
@@ -221,7 +221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/calendar/url", async (req, res) => {
     try {
-      await calendarService.removeCalendar();
+      await calendarServiceV2.removeCalendar();
       res.json({ success: true, message: "Calendar removed successfully" });
     } catch (error) {
       console.error("Failed to remove calendar:", error);
@@ -241,8 +241,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/sync-calendar", async (req, res) => {
     try {
-      await calendarService.syncCalendar();
-      res.json({ success: true, message: "Calendar synced successfully" });
+      const stats = await calendarServiceV2.syncCalendar();
+      res.json({ success: true, message: "Calendar synced successfully", stats });
     } catch (error) {
       console.error("Failed to sync calendar:", error);
       res.status(500).json({ message: "Failed to sync calendar" });
@@ -354,11 +354,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Manual calendar sync endpoint
-  app.post("/api/sync-calendar", async (req, res) => {
+  // Get calendar sync status
+  app.get("/api/calendar/status", async (req, res) => {
     try {
-      await calendarService.syncCalendar();
-      res.json({ message: "Calendar sync completed" });
+      const status = await calendarServiceV2.getSyncStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get sync status" });
+    }
+  });
+
+  // Manual calendar sync endpoint (duplicate - to be removed)
+  app.post("/api/calendar/sync", async (req, res) => {
+    try {
+      const stats = await calendarServiceV2.syncCalendar();
+      res.json({ message: "Calendar sync completed", stats });
     } catch (error) {
       res.status(500).json({ message: "Calendar sync failed" });
     }
@@ -374,10 +384,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Update the calendar service with the new URL
-      calendarService.setIcsUrl(icsUrl);
+      calendarServiceV2.setIcsUrl(icsUrl);
       
       // Trigger immediate sync
-      await calendarService.syncCalendar();
+      await calendarServiceV2.syncCalendar();
       
       res.json({ message: "Calendar setup successful" });
     } catch (error) {
