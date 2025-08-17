@@ -348,7 +348,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                     type="submit"
                     size="icon"
                     disabled={!chatInput.trim() || sendMessageMutation.isPending}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 bg-[#5E00E1] hover:bg-[#4A00B5] text-white rounded h-7 w-7"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 hover:bg-[#4A00B5] text-white rounded h-7 w-7 bg-[#5E00E1]"
                   >
                     <Send className="h-3 w-3" />
                   </Button>
@@ -403,7 +403,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                   size="icon"
                   variant="ghost"
                   onClick={onOpenChat}
-                  className="h-10 w-10 rounded-full bg-[#5E00E1] hover:bg-[#4A00B5] text-white"
+                  className="h-10 w-10 rounded-full hover:bg-[#4A00B5] text-white bg-[#5E00E1]"
                   data-testid="button-open-chat-panel"
                 >
                   <Bot className="h-5 w-5" />
