@@ -1,4 +1,4 @@
-import * as ical from "node-ical";
+import ical from "node-ical";
 // @ts-ignore - No type definitions available
 import IcalExpander from "ical-expander";
 import { storage } from "../storage";
@@ -43,8 +43,8 @@ export class CalendarServiceV2 {
   };
 
   constructor() {
-    // Disable auto-initialization to prevent memory crashes on startup
-    // this.initializeCalendarUrl();
+    // Initialize calendar URL but don't start cron job automatically
+    this.initializeCalendarUrl();
   }
 
   private async initializeCalendarUrl() {
@@ -53,8 +53,8 @@ export class CalendarServiceV2 {
       if (storedUrl) {
         this.icsUrl = storedUrl;
         console.log('[CalendarV2] Loaded calendar URL from database');
-        // Start cron job if URL exists
-        this.startCronJob();
+        // Don't auto-start cron job to prevent startup crashes
+        // this.startCronJob();
       }
     } catch (error) {
       console.error('[CalendarV2] Failed to initialize:', error);
@@ -208,17 +208,19 @@ export class CalendarServiceV2 {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      // Check content size to prevent memory issues
+      // Log content size for monitoring
       const contentLength = response.headers.get('content-length');
-      if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) {
-        throw new Error('Calendar file too large (>10MB), cannot process');
+      if (contentLength) {
+        console.log(`[CalendarV2] Calendar file size: ${Math.round(parseInt(contentLength) / 1024 / 1024)}MB`);
       }
       
       const icalString = await response.text();
       console.log(`[CalendarV2] Downloaded ${Math.round(icalString.length / 1024)}KB of iCal data`);
       
       // Use simple node-ical parser instead of ical-expander for memory efficiency
+      console.log('[CalendarV2] Parsing iCal data...');
       const parsedCal = ical.parseICS(icalString);
+      console.log(`[CalendarV2] Found ${Object.keys(parsedCal).length} calendar items`);
       
       const now = new Date();
       const startDate = new Date(now.getFullYear(), now.getMonth(), 1); // Current month only
@@ -277,7 +279,9 @@ export class CalendarServiceV2 {
       console.log('[CalendarV2] Changes detected, updating database');
       
       // Clear existing events and insert new ones (simpler approach for fewer events)
+      console.log('[CalendarV2] Clearing existing events...');
       await storage.clearCalendarEvents();
+      console.log('[CalendarV2] Existing events cleared, inserting new events...');
       
       // Insert events in small batches
       const batchSize = 10;
