@@ -154,8 +154,15 @@ export class MemStorage implements IStorage {
   }
 
   // Focus Blocks
-  async getFocusBlocks(): Promise<FocusBlock[]> {
-    return Array.from(this.focusBlocks.values());
+  async getFocusBlocks(): Promise<(FocusBlock & { taskTitle?: string })[]> {
+    const focusBlockList = Array.from(this.focusBlocks.values());
+    return focusBlockList.map(block => {
+      const task = this.tasks.get(block.taskId);
+      return {
+        ...block,
+        taskTitle: task?.title
+      };
+    });
   }
 
   async getFocusBlock(id: string): Promise<FocusBlock | undefined> {
@@ -284,8 +291,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Focus Blocks
-  async getFocusBlocks(): Promise<FocusBlock[]> {
-    return await db.select().from(focusBlocks);
+  async getFocusBlocks(): Promise<(FocusBlock & { taskTitle?: string })[]> {
+    const result = await db
+      .select({
+        id: focusBlocks.id,
+        taskId: focusBlocks.taskId,
+        start: focusBlocks.start,
+        end: focusBlocks.end,
+        confirmed: focusBlocks.confirmed,
+        createdAt: focusBlocks.createdAt,
+        taskTitle: tasks.title
+      })
+      .from(focusBlocks)
+      .leftJoin(tasks, eq(focusBlocks.taskId, tasks.id));
+    
+    return result;
   }
 
   async getFocusBlock(id: string): Promise<FocusBlock | undefined> {

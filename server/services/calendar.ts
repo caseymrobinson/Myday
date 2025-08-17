@@ -64,8 +64,8 @@ export class CalendarService {
   }
 
   private startCronJob() {
-    // Run every 15 minutes
-    cron.schedule("*/15 * * * *", async () => {
+    // Run every 60 minutes
+    cron.schedule("*/60 * * * *", async () => {
       if (this.icsUrl && !this.isRunning) {
         console.log("Starting calendar sync...");
         await this.syncCalendar();

@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import type { CalendarEvent, FocusBlock } from "../types";
-import { Bot, ChevronLeft, ChevronRight, Send } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Send, Check, X } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
@@ -16,11 +16,14 @@ interface CalendarPanelProps {
   selectedDate: Date;
   onDateChange: (date: Date) => void;
   showChat: boolean;
+  onConfirmFocusBlock?: (blockId: string) => void;
+  onDismissFocusBlock?: (blockId: string) => void;
 }
 
-export default function CalendarPanel({ events, focusBlocks, onOpenChat, selectedDate, onDateChange, showChat }: CalendarPanelProps) {
+export default function CalendarPanel({ events, focusBlocks, onOpenChat, selectedDate, onDateChange, showChat, onConfirmFocusBlock, onDismissFocusBlock }: CalendarPanelProps) {
   const [chatInput, setChatInput] = useState("");
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
 
 
@@ -62,6 +65,38 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
     handleQuickMessage(chatInput);
   };
 
+  // Focus block mutations
+  const confirmFocusBlockMutation = useMutation({
+    mutationFn: (blockId: string) => api.updateFocusBlock(blockId, { confirmed: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/focus-blocks'] });
+      toast({ title: "Task confirmed in schedule" });
+    },
+    onError: () => {
+      toast({ title: "Failed to confirm task", variant: "destructive" });
+    }
+  });
+
+  const dismissFocusBlockMutation = useMutation({
+    mutationFn: (blockId: string) => api.deleteFocusBlock(blockId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/focus-blocks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      toast({ title: "Task removed from schedule" });
+    },
+    onError: () => {
+      toast({ title: "Failed to remove task", variant: "destructive" });
+    }
+  });
+
+  const handleConfirmFocusBlock = (blockId: string) => {
+    confirmFocusBlockMutation.mutate(blockId);
+  };
+
+  const handleDismissFocusBlock = (blockId: string) => {
+    dismissFocusBlockMutation.mutate(blockId);
+  };
+
   // Generate hour slots for the day
   const hours = Array.from({ length: 24 }, (_, i) => {
     const hour = i;
@@ -88,6 +123,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       end: Date;
       color: string;
       type: 'calendar' | 'focus';
+      focusBlock?: FocusBlock;
     }> = [];
 
     // Process calendar events
@@ -117,11 +153,12 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       if (blockStart >= dayStart && blockStart <= dayEnd) {
         allEvents.push({
           id: block.id,
-          title: 'Task Block',
+          title: block.taskTitle || 'Task Block',
           start: blockStart,
           end: blockEnd,
           color: block.confirmed ? 'green' : 'purple',
-          type: 'focus'
+          type: 'focus',
+          focusBlock: block // Add full block data for actions
         });
       }
     });
@@ -139,6 +176,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       type: 'calendar' | 'focus';
       column: number;
       totalColumns: number;
+      focusBlock?: FocusBlock;
     }> = [];
 
     const columns: Array<{ endTime: Date; events: any[] }> = [];
@@ -182,7 +220,8 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
         color: event.color,
         type: event.type,
         column: assignedColumn,
-        totalColumns: 0 // Will be set below
+        totalColumns: 0, // Will be set below
+        focusBlock: event.focusBlock
       });
     });
 
@@ -318,10 +357,38 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                     ${event.color === 'blue' ? 'bg-blue-500/20 border-blue-500 text-blue-400' : ''}
                     ${event.color === 'green' ? 'bg-green-500/20 border-green-500 text-green-400' : ''}
                     ${event.color === 'purple' ? 'bg-[#5E00E1]/20 border-[#5E00E1] text-[#8C4CFF]' : ''}
-                    border-l-2 rounded px-2 py-1 h-full flex items-start
+                    border-l-2 rounded px-2 py-1 h-full flex flex-col justify-between
                   `}
                 >
                   <p className="text-xs truncate">{event.title}</p>
+                  
+                  {/* Focus block controls */}
+                  {event.type === 'focus' && event.focusBlock && !event.focusBlock.confirmed && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConfirmFocusBlock(event.focusBlock!.id);
+                        }}
+                        className="h-5 w-5 p-0 hover:bg-green-500/30 text-green-400"
+                      >
+                        <Check className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDismissFocusBlock(event.focusBlock!.id);
+                        }}
+                        className="h-5 w-5 p-0 hover:bg-red-500/30 text-red-400"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             );

@@ -54,6 +54,11 @@ export const api = {
     return response.json();
   },
 
+  deleteFocusBlock: async (id: string): Promise<{ message: string }> => {
+    const response = await apiRequest("DELETE", `/api/focus-blocks/${id}`);
+    return response.json();
+  },
+
   // Calendar
   syncCalendar: async (): Promise<{ message: string }> => {
     const response = await apiRequest("POST", "/api/sync-calendar");
