@@ -29,7 +29,7 @@ export class CalendarServiceV2 {
   private cronJob: cron.ScheduledTask | null = null;
 
   // Range config
-  private readonly pastMonths = 9;
+  private readonly pastMonths = 18;
   private readonly futureMonths = 3;
 
   // Padding around month slices to avoid TZ/DST clipping
