@@ -43,7 +43,8 @@ export class CalendarServiceV2 {
   };
 
   constructor() {
-    this.initializeCalendarUrl();
+    // Disable auto-initialization to prevent memory crashes on startup
+    // this.initializeCalendarUrl();
   }
 
   private async initializeCalendarUrl() {
@@ -201,56 +202,64 @@ export class CalendarServiceV2 {
       console.log(`[CalendarV2] Fetching calendar from: ${this.icsUrl}`);
       console.log(`[CalendarV2] Sync started at: ${stats.startTime.toISOString()}`);
       
-      // Fetch raw iCal data  
+      // Fetch raw iCal data with size limit
       const response = await fetch(this.icsUrl);
-      const icalString = await response.text();
-      
-      // Use ical-expander with limited iterations for memory efficiency
-      const icalExpander = new IcalExpander({ ics: icalString, maxIterations: 100 });
-      
-      // Expand events for a more focused time range to avoid memory issues
-      const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1); // 1 month back
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 3, 0); // 3 months forward
-      
-      const expandedEvents = icalExpander.between(startDate, endDate);
-      
-      // Process both events and occurrences (recurring instances)
-      const allExpandedEvents = [
-        ...expandedEvents.events,
-        ...expandedEvents.occurrences
-      ];
-      
-      stats.eventsFound = allExpandedEvents.length;
-      console.log(`[CalendarV2] Expanded events found: ${stats.eventsFound}`);
-      
-      // Limit events to prevent memory overflow
-      const maxEvents = 1000;
-      if (stats.eventsFound > maxEvents) {
-        console.log(`[CalendarV2] Too many events (${stats.eventsFound}), limiting to ${maxEvents} most recent`);
-        allExpandedEvents.sort((a, b) => new Date(a.startDate.toJSDate()).getTime() - new Date(b.startDate.toJSDate()).getTime());
-        allExpandedEvents.splice(maxEvents);
-        stats.eventsFound = maxEvents;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      // Convert to our calendar event format with unique IDs
-      const calendarEvents: InsertCalendarEvent[] = allExpandedEvents.map((event, index) => {
-        const startDate = new Date(event.startDate.toJSDate());
-        const endDate = new Date(event.endDate.toJSDate());
+      // Check content size to prevent memory issues
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) {
+        throw new Error('Calendar file too large (>10MB), cannot process');
+      }
+      
+      const icalString = await response.text();
+      console.log(`[CalendarV2] Downloaded ${Math.round(icalString.length / 1024)}KB of iCal data`);
+      
+      // Use simple node-ical parser instead of ical-expander for memory efficiency
+      const parsedCal = ical.parseICS(icalString);
+      
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 1); // Current month only
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 2, 0); // Next month only
+      
+      const calendarEvents: InsertCalendarEvent[] = [];
+      let processedCount = 0;
+      const maxEvents = 200; // Much smaller limit
+      
+      // Process events one by one to avoid memory buildup
+      for (const [key, event] of Object.entries(parsedCal)) {
+        if (processedCount >= maxEvents) {
+          console.log(`[CalendarV2] Reached maximum event limit (${maxEvents}), stopping`);
+          break;
+        }
         
-        // Create unique ID for each occurrence: original_uid + start_timestamp
-        const uniqueId = `${event.uid}_${startDate.getTime()}`;
+        const parsedEvent = this.parseICalEvent(key, event);
+        if (!parsedEvent) continue;
         
-        return {
-          id: uniqueId,
-          title: event.summary || "Untitled Event", 
-          start: startDate,
-          end: endDate,
-          location: event.location || null,
-          description: event.description || null,
-          isAllDay: event.isFullDay || false
-        };
-      });
+        // Only include events within our focused time range
+        if (parsedEvent.start >= startDate && parsedEvent.start <= endDate) {
+          calendarEvents.push({
+            id: parsedEvent.uid,
+            title: parsedEvent.title,
+            start: parsedEvent.start,
+            end: parsedEvent.end,
+            location: parsedEvent.location || null,
+            description: parsedEvent.description || null,
+            isAllDay: parsedEvent.isAllDay
+          });
+          processedCount++;
+        }
+        
+        // Free memory every 50 events
+        if (processedCount % 50 === 0 && global.gc) {
+          global.gc();
+        }
+      }
+      
+      stats.eventsFound = calendarEvents.length;
+      console.log(`[CalendarV2] Processed ${stats.eventsFound} events from calendar`);
       
       // Calculate hash for change detection
       const currentHash = crypto.createHash('md5')
@@ -267,59 +276,36 @@ export class CalendarServiceV2 {
       
       console.log('[CalendarV2] Changes detected, updating database');
       
-      // Use upsert approach instead of clear+insert
-      const syncTimestamp = new Date();
+      // Clear existing events and insert new ones (simpler approach for fewer events)
+      await storage.clearCalendarEvents();
       
-      // Upsert events in smaller batches for memory efficiency
-      const batchSize = 20;
-      const processedIds = new Set<string>();
+      // Insert events in small batches
+      const batchSize = 10;
+      let processed = 0;
       
       for (let i = 0; i < calendarEvents.length; i += batchSize) {
         const batch = calendarEvents.slice(i, i + batchSize);
         
         try {
           for (const event of batch) {
-            // Try to update existing event, create if not exists
-            const existing = await storage.getCalendarEvent(event.id);
-            
-            if (existing) {
-              await storage.updateCalendarEvent(event.id, event);
-            } else {
-              await storage.createCalendarEvent(event);
-            }
-            
-            processedIds.add(event.id);
-            stats.eventsStored++;
+            await storage.createCalendarEvent(event);
+            processed++;
           }
           
-          // Log progress every 100 events and trigger garbage collection
-          if (stats.eventsStored % 100 === 0) {
-            console.log(`[CalendarV2] Progress: ${stats.eventsStored}/${calendarEvents.length} events processed`);
-            // Force garbage collection to prevent memory buildup
-            if (global.gc) {
-              global.gc();
-            }
+          console.log(`[CalendarV2] Progress: ${processed}/${calendarEvents.length} events stored`);
+          
+          // Trigger garbage collection every batch
+          if (global.gc) {
+            global.gc();
           }
         } catch (error) {
-          console.error(`[CalendarV2] Failed to process batch at index ${i}:`, error);
+          console.error(`[CalendarV2] Failed to store batch:`, error);
           stats.errors++;
-          if (stats.errors <= 5) {
-            stats.errorMessages.push(`Failed to process batch at index ${i}: ${error}`);
-          }
+          stats.errorMessages.push(`Failed to store batch: ${error}`);
         }
       }
       
-      // Remove events that weren't updated in this sync (stale events)
-      const existingEvents = await storage.getCalendarEvents();
-      let removedCount = 0;
-      for (const existing of existingEvents) {
-        if (!processedIds.has(existing.id)) {
-          await storage.deleteCalendarEvent(existing.id);
-          removedCount++;
-        }
-      }
-      
-      console.log(`[CalendarV2] Removed ${removedCount} stale events`);
+      stats.eventsStored = processed;
       
       // Update last sync hash
       this.lastSyncHash = currentHash;
@@ -333,9 +319,8 @@ export class CalendarServiceV2 {
       
       // Log summary
       console.log('[CalendarV2] ============ SYNC SUMMARY ============');
-      console.log(`[CalendarV2] Expanded events processed: ${stats.eventsFound}`);
-      console.log(`[CalendarV2] Events stored/updated: ${stats.eventsStored}`);
-      console.log(`[CalendarV2] Stale events removed: ${removedCount}`);
+      console.log(`[CalendarV2] Events processed: ${stats.eventsFound}`);
+      console.log(`[CalendarV2] Events stored: ${stats.eventsStored}`);
       console.log(`[CalendarV2] Storage errors: ${stats.errors}`);
       console.log('[CalendarV2] ======================================');
       
