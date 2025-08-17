@@ -1,4 +1,5 @@
 import * as ical from "node-ical";
+import IcalExpander from "ical-expander";
 import { storage } from "../storage";
 import { type InsertCalendarEvent } from "@shared/schema";
 import cron from "node-cron";
@@ -199,28 +200,51 @@ export class CalendarServiceV2 {
       console.log(`[CalendarV2] Fetching calendar from: ${this.icsUrl}`);
       console.log(`[CalendarV2] Sync started at: ${stats.startTime.toISOString()}`);
       
-      // Fetch and parse iCal data
-      const rawData = await ical.fromURL(this.icsUrl);
-      stats.totalParsed = Object.keys(rawData).length;
+      // Fetch raw iCal data  
+      const response = await fetch(this.icsUrl);
+      const icalString = await response.text();
       
-      console.log(`[CalendarV2] Total objects in iCal file: ${stats.totalParsed}`);
+      // Use ical-expander to properly expand recurring events
+      const icalExpander = new IcalExpander({ ics: icalString, maxIterations: 1000 });
       
-      // Parse all events
-      const parsedEvents: ParsedEvent[] = [];
+      // Expand events for a reasonable time range (1 year back, 2 years forward)
+      const now = new Date();
+      const startDate = new Date(now.getFullYear() - 1, 0, 1); // Start of last year
+      const endDate = new Date(now.getFullYear() + 2, 11, 31); // End of next year
       
-      for (const [key, value] of Object.entries(rawData)) {
-        const parsed = this.parseICalEvent(key, value);
-        if (parsed) {
-          parsedEvents.push(parsed);
-          stats.eventsFound++;
-        }
-      }
+      const expandedEvents = icalExpander.between(startDate, endDate);
       
-      console.log(`[CalendarV2] Valid events found: ${stats.eventsFound}`);
+      // Process both events and occurrences (recurring instances)
+      const allExpandedEvents = [
+        ...expandedEvents.events,
+        ...expandedEvents.occurrences
+      ];
       
-      // Calculate hash of all events to detect changes
+      stats.eventsFound = allExpandedEvents.length;
+      console.log(`[CalendarV2] Expanded events found: ${stats.eventsFound}`);
+      
+      // Convert to our calendar event format with unique IDs
+      const calendarEvents: InsertCalendarEvent[] = allExpandedEvents.map((event, index) => {
+        const startDate = new Date(event.startDate.toJSDate());
+        const endDate = new Date(event.endDate.toJSDate());
+        
+        // Create unique ID for each occurrence: original_uid + start_timestamp
+        const uniqueId = `${event.uid}_${startDate.getTime()}`;
+        
+        return {
+          id: uniqueId,
+          title: event.summary || "Untitled Event", 
+          start: startDate,
+          end: endDate,
+          location: event.location || null,
+          description: event.description || null,
+          isAllDay: event.isFullDay || false
+        };
+      });
+      
+      // Calculate hash for change detection
       const currentHash = crypto.createHash('md5')
-        .update(parsedEvents.map(e => e.hash).sort().join('-'))
+        .update(calendarEvents.map(e => `${e.id}-${e.title}-${e.start.getTime()}`).sort().join('|'))
         .digest('hex');
       
       // Check if data has changed
@@ -233,43 +257,55 @@ export class CalendarServiceV2 {
       
       console.log('[CalendarV2] Changes detected, updating database');
       
-      // Clear existing events and insert new ones in a transaction-like manner
-      await storage.clearCalendarEvents();
-      console.log('[CalendarV2] Cleared existing events');
+      // Use upsert approach instead of clear+insert
+      const syncTimestamp = new Date();
       
-      // Prepare all events for bulk insert
-      const calendarEvents: InsertCalendarEvent[] = parsedEvents.map(event => ({
-        id: event.uid,
-        title: event.title,
-        start: event.start,
-        end: event.end,
-        location: event.location || null,
-        description: event.description || null,
-        isAllDay: event.isAllDay
-      }));
+      // Upsert events in batches
+      const batchSize = 50;
+      const processedIds = new Set<string>();
       
-      // Bulk insert in batches to avoid overwhelming the database
-      const batchSize = 100;
       for (let i = 0; i < calendarEvents.length; i += batchSize) {
         const batch = calendarEvents.slice(i, i + batchSize);
+        
         try {
-          // Insert batch
           for (const event of batch) {
-            await storage.createCalendarEvent(event);
+            // Try to update existing event, create if not exists
+            const existing = await storage.getCalendarEvent(event.id);
+            
+            if (existing) {
+              await storage.updateCalendarEvent(event.id, event);
+            } else {
+              await storage.createCalendarEvent(event);
+            }
+            
+            processedIds.add(event.id);
             stats.eventsStored++;
           }
           
           // Log progress every 500 events
           if (stats.eventsStored % 500 === 0) {
-            console.log(`[CalendarV2] Progress: ${stats.eventsStored}/${calendarEvents.length} events stored`);
+            console.log(`[CalendarV2] Progress: ${stats.eventsStored}/${calendarEvents.length} events processed`);
           }
         } catch (error) {
+          console.error(`[CalendarV2] Failed to process batch at index ${i}:`, error);
           stats.errors++;
           if (stats.errors <= 5) {
-            stats.errorMessages.push(`Failed to store batch at index ${i}: ${error}`);
+            stats.errorMessages.push(`Failed to process batch at index ${i}: ${error}`);
           }
         }
       }
+      
+      // Remove events that weren't updated in this sync (stale events)
+      const existingEvents = await storage.getCalendarEvents();
+      let removedCount = 0;
+      for (const existing of existingEvents) {
+        if (!processedIds.has(existing.id)) {
+          await storage.deleteCalendarEvent(existing.id);
+          removedCount++;
+        }
+      }
+      
+      console.log(`[CalendarV2] Removed ${removedCount} stale events`);
       
       // Update last sync hash
       this.lastSyncHash = currentHash;
@@ -283,9 +319,9 @@ export class CalendarServiceV2 {
       
       // Log summary
       console.log('[CalendarV2] ============ SYNC SUMMARY ============');
-      console.log(`[CalendarV2] Total objects parsed: ${stats.totalParsed}`);
-      console.log(`[CalendarV2] Valid events found: ${stats.eventsFound}`);
-      console.log(`[CalendarV2] Events stored: ${stats.eventsStored}`);
+      console.log(`[CalendarV2] Expanded events processed: ${stats.eventsFound}`);
+      console.log(`[CalendarV2] Events stored/updated: ${stats.eventsStored}`);
+      console.log(`[CalendarV2] Stale events removed: ${removedCount}`);
       console.log(`[CalendarV2] Storage errors: ${stats.errors}`);
       console.log('[CalendarV2] ======================================');
       
