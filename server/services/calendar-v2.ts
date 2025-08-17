@@ -91,7 +91,6 @@ export class CalendarServiceV2 {
   async removeCalendar(): Promise<void> {
     console.log('[CalendarV2] Removing calendar');
     this.icsUrl = null;
-    this.lastSyncHash = null; // Reset hash to force fresh sync
     this.stopCronJob();
     
     await storage.setSetting('calendar_url', '');
@@ -137,47 +136,83 @@ export class CalendarServiceV2 {
     return crypto.createHash('md5').update(data).digest('hex');
   }
 
-  private parseICalEvent(key: string, event: any): ParsedEvent | null {
+  private expandEventInstances(event: any, startDate: Date, endDate: Date): InsertCalendarEvent[] {
     try {
-      // Only process VEVENT types
-      if (event.type !== 'VEVENT') {
-        return null;
-      }
-
-      // Must have start date
-      if (!event.start) {
-        return null;
-      }
-
-      const start = new Date(event.start);
-      const end = event.end ? new Date(event.end) : new Date(start.getTime() + 60 * 60 * 1000); // Default 1 hour
-
+      if (!event.start) return [];
+      
+      const eventStart = new Date(event.start);
+      const eventEnd = event.end ? new Date(event.end) : new Date(eventStart.getTime() + 60 * 60 * 1000);
+      
       // Validate dates
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        return null;
+      if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
+        return [];
       }
-
-      // Check if all-day event
+      
+      const baseUid = event.uid || 'unknown';
       const isAllDay = !!(
         event.datetype === 'date' ||
-        (start.getHours() === 0 && start.getMinutes() === 0 && 
-         end.getHours() === 0 && end.getMinutes() === 0)
+        (eventStart.getHours() === 0 && eventStart.getMinutes() === 0 && 
+         eventEnd.getHours() === 0 && eventEnd.getMinutes() === 0)
       );
-
-      return {
-        uid: event.uid || key,
-        title: event.summary || "Untitled Event",
-        start,
-        end,
-        location: event.location || undefined,
-        description: event.description || undefined,
-        isAllDay,
-        recurringId: event.recurrenceid || undefined,
-        hash: this.generateEventHash(event)
-      };
+      
+      // If no recurrence, just add single event if in range
+      if (!event.rrule) {
+        if (eventStart >= startDate && eventStart <= endDate) {
+          return [{
+            id: `${baseUid}_${eventStart.getTime()}`,
+            title: event.summary || "Untitled Event",
+            start: eventStart,
+            end: eventEnd,
+            location: event.location || null,
+            description: event.description || null,
+            isAllDay
+          }];
+        }
+        return [];
+      }
+      
+      // Simple recurring event expansion (weekly meetings only to avoid complexity)
+      const instances: InsertCalendarEvent[] = [];
+      if (event.rrule.freq === 'WEEKLY') {
+        let currentDate = new Date(eventStart);
+        const duration = eventEnd.getTime() - eventStart.getTime();
+        let instanceCount = 0;
+        const maxInstances = 50; // Limit instances per event
+        
+        while (currentDate <= endDate && instanceCount < maxInstances) {
+          if (currentDate >= startDate) {
+            const instanceEnd = new Date(currentDate.getTime() + duration);
+            instances.push({
+              id: `${baseUid}_${currentDate.getTime()}`,
+              title: event.summary || "Untitled Event", 
+              start: new Date(currentDate),
+              end: instanceEnd,
+              location: event.location || null,
+              description: event.description || null,
+              isAllDay
+            });
+            instanceCount++;
+          }
+          // Move to next week
+          currentDate.setDate(currentDate.getDate() + 7);
+        }
+      } else if (eventStart >= startDate && eventStart <= endDate) {
+        // For other recurrence types, just add the base event
+        instances.push({
+          id: `${baseUid}_${eventStart.getTime()}`,
+          title: event.summary || "Untitled Event",
+          start: eventStart,
+          end: eventEnd,
+          location: event.location || null,
+          description: event.description || null,
+          isAllDay
+        });
+      }
+      
+      return instances;
     } catch (error) {
-      console.error(`[CalendarV2] Error parsing event ${key}:`, error);
-      return null;
+      console.error(`[CalendarV2] Error expanding event:`, error);
+      return [];
     }
   }
 
@@ -218,51 +253,43 @@ export class CalendarServiceV2 {
       const icalString = await response.text();
       console.log(`[CalendarV2] Downloaded ${Math.round(icalString.length / 1024)}KB of iCal data`);
       
-      // Use simple node-ical parser instead of ical-expander for memory efficiency
-      console.log('[CalendarV2] Parsing iCal data...');
+      // Use hybrid approach: node-ical parsing + selective recurrence expansion
+      console.log('[CalendarV2] Parsing iCal data with selective expansion...');
       const parsedCal = ical.parseICS(icalString);
       console.log(`[CalendarV2] Found ${Object.keys(parsedCal).length} calendar items`);
       
       const now = new Date();
-      // Past 9 months and future 3 months from today  
-      const startDate = new Date(now.getFullYear(), now.getMonth() - 9, 1);
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 4, 0);
+      // Past 3 months and future 6 months for reasonable coverage
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 7, 0);
       
       const calendarEvents: InsertCalendarEvent[] = [];
       let processedCount = 0;
-      const maxEvents = 3000; // Increased limit for better coverage
+      const maxEvents = 1500; // Higher limit since we're managing memory better
       
-      // Process events one by one to avoid memory buildup
+      // Process events with selective recurrence expansion
       for (const [key, event] of Object.entries(parsedCal)) {
         if (processedCount >= maxEvents) {
           console.log(`[CalendarV2] Reached maximum event limit (${maxEvents}), stopping`);
           break;
         }
         
-        const parsedEvent = this.parseICalEvent(key, event);
-        if (!parsedEvent) continue;
+        if (event.type !== 'VEVENT') continue;
         
-        // Only include events that actually occur within our time range
-        const isInTimeRange = parsedEvent.start >= startDate && parsedEvent.start <= endDate;
-        
-        if (isInTimeRange) {
-          calendarEvents.push({
-            id: parsedEvent.uid,
-            title: parsedEvent.title,
-            start: parsedEvent.start,
-            end: parsedEvent.end,
-            location: parsedEvent.location || null,
-            description: parsedEvent.description || null,
-            isAllDay: parsedEvent.isAllDay
-          });
+        const expandedEvents = this.expandEventInstances(event, startDate, endDate);
+        for (const expandedEvent of expandedEvents) {
+          if (processedCount >= maxEvents) break;
+          calendarEvents.push(expandedEvent);
           processedCount++;
         }
         
-        // Free memory every 50 events
-        if (processedCount % 50 === 0 && global.gc) {
+        // Memory management
+        if (processedCount % 100 === 0 && global.gc) {
           global.gc();
         }
       }
+      
+      console.log(`[CalendarV2] Processed ${processedCount} events with selective expansion`);
       
       stats.eventsFound = calendarEvents.length;
       console.log(`[CalendarV2] Processed ${stats.eventsFound} events from calendar`);
