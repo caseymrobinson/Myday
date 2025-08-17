@@ -205,13 +205,13 @@ export class CalendarServiceV2 {
       const response = await fetch(this.icsUrl);
       const icalString = await response.text();
       
-      // Use ical-expander to properly expand recurring events
-      const icalExpander = new IcalExpander({ ics: icalString, maxIterations: 1000 });
+      // Use ical-expander with limited iterations for memory efficiency
+      const icalExpander = new IcalExpander({ ics: icalString, maxIterations: 100 });
       
-      // Expand events for a reasonable time range (1 year back, 2 years forward)
+      // Expand events for a more focused time range to avoid memory issues
       const now = new Date();
-      const startDate = new Date(now.getFullYear() - 1, 0, 1); // Start of last year
-      const endDate = new Date(now.getFullYear() + 2, 11, 31); // End of next year
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1); // 1 month back
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 3, 0); // 3 months forward
       
       const expandedEvents = icalExpander.between(startDate, endDate);
       
@@ -223,6 +223,15 @@ export class CalendarServiceV2 {
       
       stats.eventsFound = allExpandedEvents.length;
       console.log(`[CalendarV2] Expanded events found: ${stats.eventsFound}`);
+      
+      // Limit events to prevent memory overflow
+      const maxEvents = 1000;
+      if (stats.eventsFound > maxEvents) {
+        console.log(`[CalendarV2] Too many events (${stats.eventsFound}), limiting to ${maxEvents} most recent`);
+        allExpandedEvents.sort((a, b) => new Date(a.startDate.toJSDate()).getTime() - new Date(b.startDate.toJSDate()).getTime());
+        allExpandedEvents.splice(maxEvents);
+        stats.eventsFound = maxEvents;
+      }
       
       // Convert to our calendar event format with unique IDs
       const calendarEvents: InsertCalendarEvent[] = allExpandedEvents.map((event, index) => {
@@ -261,8 +270,8 @@ export class CalendarServiceV2 {
       // Use upsert approach instead of clear+insert
       const syncTimestamp = new Date();
       
-      // Upsert events in batches
-      const batchSize = 50;
+      // Upsert events in smaller batches for memory efficiency
+      const batchSize = 20;
       const processedIds = new Set<string>();
       
       for (let i = 0; i < calendarEvents.length; i += batchSize) {
@@ -283,9 +292,13 @@ export class CalendarServiceV2 {
             stats.eventsStored++;
           }
           
-          // Log progress every 500 events
-          if (stats.eventsStored % 500 === 0) {
+          // Log progress every 100 events and trigger garbage collection
+          if (stats.eventsStored % 100 === 0) {
             console.log(`[CalendarV2] Progress: ${stats.eventsStored}/${calendarEvents.length} events processed`);
+            // Force garbage collection to prevent memory buildup
+            if (global.gc) {
+              global.gc();
+            }
           }
         } catch (error) {
           console.error(`[CalendarV2] Failed to process batch at index ${i}:`, error);
