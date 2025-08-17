@@ -305,7 +305,10 @@ export class DatabaseStorage implements IStorage {
       .from(focusBlocks)
       .leftJoin(tasks, eq(focusBlocks.taskId, tasks.id));
     
-    return result;
+    return result.map(row => ({
+      ...row,
+      taskTitle: row.taskTitle || undefined
+    }));
   }
 
   async getFocusBlock(id: string): Promise<FocusBlock | undefined> {

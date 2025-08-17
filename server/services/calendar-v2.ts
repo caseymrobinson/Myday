@@ -1,4 +1,5 @@
 import * as ical from "node-ical";
+// @ts-ignore - No type definitions available
 import IcalExpander from "ical-expander";
 import { storage } from "../storage";
 import { type InsertCalendarEvent } from "@shared/schema";
@@ -383,20 +384,7 @@ export class CalendarServiceV2 {
       }));
   }
 
-  async getSyncStatus(): Promise<{ 
-    isRunning: boolean; 
-    lastSyncHash: string | null; 
-    eventCount: number;
-    url: string | null;
-  }> {
-    const events = await storage.getCalendarEvents();
-    return {
-      isRunning: this.isRunning,
-      lastSyncHash: this.lastSyncHash,
-      eventCount: events.length,
-      url: this.icsUrl
-    };
-  }
+
 }
 
 // Export singleton instance
