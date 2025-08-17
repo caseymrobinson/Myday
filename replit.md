@@ -4,9 +4,10 @@ My Day is an AI-first daily planning assistant that combines calendar integratio
 
 ## Recent Changes (Aug 17, 2025)
 - **Fixed Calendar Data Integration** - Resolved inconsistent calendar sync that was only importing 140 events out of 3000+
-  - Expanded date range from (30 days ago - 1 year ahead) to (1 year ago - 2 years ahead)
-  - Added detailed logging to track skipped events by category (out-of-range, invalid dates, non-events)
-  - Calendar now properly syncs 1089 events providing comprehensive calendar coverage
+  - Final solution: 1 year historical data + 3 months future (August 2024 to November 2025)
+  - Successfully syncing 1088 events with comprehensive coverage
+  - Added detailed logging showing event distribution (2295 too old, 1 too far future, 1088 in range)
+  - Date range now properly captures actual calendar data distribution instead of being centered on today
 
 ## Previous Changes (Aug 16, 2025)
 - **Dynamic AI Prompt Visibility** - Floating AI chat bubble now intelligently hides when chat panel is open and shows when closed for clean, non-redundant interface

@@ -98,6 +98,18 @@ export class CalendarService {
       let invalidDateCount = 0;
       let outOfRangeCount = 0;
       let nonEventCount = 0;
+      let futureOutOfRange = 0;
+      let pastOutOfRange = 0;
+      
+      // Capture a full year of historical data plus 3 months future
+      // This ensures we get all relevant calendar data including past events
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      const threeMonthsFromNow = new Date();
+      threeMonthsFromNow.setMonth(threeMonthsFromNow.getMonth() + 3);
+      
+      console.log(`Date range: ${oneYearAgo.toISOString()} to ${threeMonthsFromNow.toISOString()}`);
+      console.log(`Today: ${new Date().toISOString()}`);
       
       // Process each event
       for (const [key, event] of Object.entries(events)) {
@@ -109,13 +121,7 @@ export class CalendarService {
             const eventStart = new Date(icalEvent.start);
             const eventEnd = new Date(icalEvent.end);
             
-            // Sync events from the last year to next 2 years to capture comprehensive calendar data
-            const oneYearAgo = new Date();
-            oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-            const twoYearsFromNow = new Date();
-            twoYearsFromNow.setFullYear(twoYearsFromNow.getFullYear() + 2);
-            
-            if (eventStart >= oneYearAgo && eventStart <= twoYearsFromNow) {
+            if (eventStart >= oneYearAgo && eventStart <= threeMonthsFromNow) {
               const normalizedEvent: InsertCalendarEvent = {
                 id: icalEvent.uid || key,
                 title: icalEvent.summary || "Untitled Event",
@@ -135,7 +141,14 @@ export class CalendarService {
             } else {
               outOfRangeCount++;
               skippedCount++;
-              if (outOfRangeCount <= 3) {
+              
+              if (eventStart < oneYearAgo) {
+                pastOutOfRange++;
+              } else if (eventStart > threeMonthsFromNow) {
+                futureOutOfRange++;
+              }
+              
+              if (outOfRangeCount <= 5) {
                 console.log(`Skipped out-of-range event: ${icalEvent.summary} (${eventStart.toISOString()})`);
               }
             }
@@ -149,8 +162,10 @@ export class CalendarService {
       }
       
       console.log(`Calendar sync completed: ${processedCount} events processed`);
-      console.log(`Skipped: ${skippedCount} total (${outOfRangeCount} out of date range, ${invalidDateCount} invalid dates)`);
-      console.log(`Non-event objects: ${nonEventCount}`);
+      console.log(`Skipped: ${skippedCount} total`);
+      console.log(`  - Out of range: ${outOfRangeCount} (${pastOutOfRange} too old, ${futureOutOfRange} too far in future)`);
+      console.log(`  - Invalid dates: ${invalidDateCount}`);
+      console.log(`  - Non-event objects: ${nonEventCount}`);
     } catch (error) {
       console.error("Calendar sync failed:", error);
     } finally {
