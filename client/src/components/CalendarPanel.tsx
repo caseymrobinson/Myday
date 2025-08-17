@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import type { CalendarEvent, FocusBlock } from "../types";
-import { Bot, ChevronLeft, ChevronRight, Send, Check, X } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Send, Check, X, Calendar } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -126,13 +126,13 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       focusBlock?: FocusBlock;
     }> = [];
 
-    // Process calendar events
+    // Process calendar events (exclude all-day events from timeline)
     events?.forEach(event => {
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
       
-      // Only include events that occur on this day (using local time)
-      if (eventStart >= dayStart && eventStart <= dayEnd) {
+      // Only include timed events that occur on this day (all-day events handled separately)
+      if (!event.isAllDay && eventStart >= dayStart && eventStart <= dayEnd) {
         allEvents.push({
           id: event.id,
           title: event.title,
@@ -153,7 +153,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       if (blockStart >= dayStart && blockStart <= dayEnd) {
         allEvents.push({
           id: block.id,
-          title: block.taskTitle || 'Task Block',
+          title: 'Task Block',
           start: blockStart,
           end: blockEnd,
           color: block.confirmed ? 'green' : 'purple',
@@ -236,6 +236,18 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
 
   const positionedEvents = calculateEventPositions();
 
+  // Get all-day events for this day
+  const dayStart = new Date(currentDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(currentDate);
+  dayEnd.setHours(23, 59, 59, 999);
+  
+  const allDayEvents = events?.filter(event => {
+    const eventStart = new Date(event.start);
+    const eventEnd = new Date(event.end);
+    return event.isAllDay && eventStart >= dayStart && eventStart <= dayEnd;
+  }) || [];
+
   // Get current hour for highlighting (only if viewing today)
   const now = new Date();
   const isToday = currentDate.toDateString() === now.toDateString();
@@ -303,6 +315,32 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           </div>
         </div>
       </div>
+      
+      {/* All-Day Events Sticky Header */}
+      {allDayEvents.length > 0 && (
+        <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
+          <div className="px-6 py-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="h-4 w-4 text-gray-400" />
+              <span className="text-xs text-gray-400 font-medium">All Day</span>
+            </div>
+            <div className="space-y-2">
+              {allDayEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="bg-indigo-500/20 border-l-2 border-indigo-500 rounded px-3 py-2 text-sm"
+                >
+                  <div className="text-indigo-300 font-medium">{event.title}</div>
+                  {event.location && (
+                    <div className="text-gray-400 text-xs mt-1">{event.location}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Calendar Grid */}
       <ScrollArea className="flex-1 bg-black">
         <div className="px-6 relative">
