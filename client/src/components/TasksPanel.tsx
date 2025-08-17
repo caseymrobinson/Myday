@@ -130,7 +130,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
         </Button>
         <Button 
           onClick={onPlanDay}
-          className="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white flex items-center gap-2"
+          className="hover:bg-gray-700 text-gray-300 hover:text-white flex items-center gap-2 bg-[#37415100]"
           data-testid="button-plan-day"
         >
           <Bot className="h-4 w-4" />
