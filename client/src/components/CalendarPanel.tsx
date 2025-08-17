@@ -340,7 +340,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     placeholder="Ask me about my schedule"
-                    className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 pr-10 rounded-lg"
+                    className="border-gray-700 text-white placeholder-gray-500 pr-10 rounded-lg bg-[#1e1e1e]"
                     disabled={sendMessageMutation.isPending}
                     data-testid="schedule-chat-input"
                   />
