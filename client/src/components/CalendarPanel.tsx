@@ -227,7 +227,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           </Button>
           <Button 
             onClick={() => onDateChange(new Date())}
-            className="bg-primary hover:bg-primary/90 text-white"
+            className="hover:bg-primary/90 text-white bg-[#5E00E1]"
           >
             Today
           </Button>
