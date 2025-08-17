@@ -2,7 +2,13 @@
 
 My Day is an AI-first daily planning assistant that combines calendar integration, intelligent task scheduling, and natural language interaction to help users manage their day effectively. The application provides a unified three-pane interface (tasks, calendar, and chat) with features like Google Calendar integration via iCal URL, smart task management with multiple sources (manual, Slack, AI), AI-powered scheduling suggestions, and natural language chat capabilities.
 
-## Recent Changes (Aug 16, 2025)
+## Recent Changes (Aug 17, 2025)
+- **Fixed Calendar Data Integration** - Resolved inconsistent calendar sync that was only importing 140 events out of 3000+
+  - Expanded date range from (30 days ago - 1 year ahead) to (1 year ago - 2 years ahead)
+  - Added detailed logging to track skipped events by category (out-of-range, invalid dates, non-events)
+  - Calendar now properly syncs 1089 events providing comprehensive calendar coverage
+
+## Previous Changes (Aug 16, 2025)
 - **Dynamic AI Prompt Visibility** - Floating AI chat bubble now intelligently hides when chat panel is open and shows when closed for clean, non-redundant interface
 - **Complete UI Refinement** - Removed all borders in favor of proper background layering (gray-900 headers, gray-950 action areas, black content)
 - **Enhanced Button Layout** - Plan My Day now uses AI Bot icon, settings moved inline with action buttons, removed redundant floating chat button

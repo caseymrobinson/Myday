@@ -95,6 +95,9 @@ export class CalendarService {
       
       let processedCount = 0;
       let skippedCount = 0;
+      let invalidDateCount = 0;
+      let outOfRangeCount = 0;
+      let nonEventCount = 0;
       
       // Process each event
       for (const [key, event] of Object.entries(events)) {
@@ -106,13 +109,13 @@ export class CalendarService {
             const eventStart = new Date(icalEvent.start);
             const eventEnd = new Date(icalEvent.end);
             
-            // Only sync events from the last 30 days to next 365 days to avoid too much old data
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            const oneYearFromNow = new Date();
-            oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+            // Sync events from the last year to next 2 years to capture comprehensive calendar data
+            const oneYearAgo = new Date();
+            oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+            const twoYearsFromNow = new Date();
+            twoYearsFromNow.setFullYear(twoYearsFromNow.getFullYear() + 2);
             
-            if (eventStart >= thirtyDaysAgo && eventStart <= oneYearFromNow) {
+            if (eventStart >= oneYearAgo && eventStart <= twoYearsFromNow) {
               const normalizedEvent: InsertCalendarEvent = {
                 id: icalEvent.uid || key,
                 title: icalEvent.summary || "Untitled Event",
@@ -130,15 +133,24 @@ export class CalendarService {
                 console.log(`Processed event: ${normalizedEvent.title} (${eventStart.toISOString()})`);
               }
             } else {
+              outOfRangeCount++;
               skippedCount++;
+              if (outOfRangeCount <= 3) {
+                console.log(`Skipped out-of-range event: ${icalEvent.summary} (${eventStart.toISOString()})`);
+              }
             }
           } else {
+            invalidDateCount++;
             skippedCount++;
           }
+        } else {
+          nonEventCount++;
         }
       }
       
-      console.log(`Calendar sync completed: ${processedCount} events processed, ${skippedCount} skipped`);
+      console.log(`Calendar sync completed: ${processedCount} events processed`);
+      console.log(`Skipped: ${skippedCount} total (${outOfRangeCount} out of date range, ${invalidDateCount} invalid dates)`);
+      console.log(`Non-event objects: ${nonEventCount}`);
     } catch (error) {
       console.error("Calendar sync failed:", error);
     } finally {
