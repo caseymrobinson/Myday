@@ -91,6 +91,7 @@ export class CalendarServiceV2 {
   async removeCalendar(): Promise<void> {
     console.log('[CalendarV2] Removing calendar');
     this.icsUrl = null;
+    this.lastSyncHash = null; // Reset hash to force fresh sync
     this.stopCronJob();
     
     await storage.setSetting('calendar_url', '');
@@ -229,7 +230,7 @@ export class CalendarServiceV2 {
       
       const calendarEvents: InsertCalendarEvent[] = [];
       let processedCount = 0;
-      const maxEvents = 500; // Increased limit for better coverage
+      const maxEvents = 3000; // Increased limit for better coverage
       
       // Process events one by one to avoid memory buildup
       for (const [key, event] of Object.entries(parsedCal)) {
@@ -289,7 +290,7 @@ export class CalendarServiceV2 {
       console.log('[CalendarV2] Existing events cleared, inserting new events...');
       
       // Insert events in small batches
-      const batchSize = 10;
+      const batchSize = 100;
       let processed = 0;
       
       for (let i = 0; i < calendarEvents.length; i += batchSize) {
