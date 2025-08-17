@@ -1,8 +1,9 @@
 // Calendar sync with recurrence expansion, low memory, and idempotent writes.
 
 /// <reference lib="dom" />
-// @ts-ignore - No type definitions available
-import IcalExpander from "ical-expander";
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const ical = require("node-ical");
 import { storage } from "../storage";
 import { type InsertCalendarEvent } from "@shared/schema";
 import * as cron from "node-cron";
@@ -141,9 +142,84 @@ export class CalendarServiceV2 {
     return slices;
   }
 
-  private isAllDayFromExpander(obj: any): boolean {
-    // ical-expander exposes ICAL.Time via startDate; all-day events have isDate === true
-    return !!(obj?.startDate?.isDate === true);
+  private expandRecurringEvent(event: any, rangeStart: Date, rangeEnd: Date): InsertCalendarEvent[] {
+    try {
+      if (!event.start) return [];
+
+      const eventStart = new Date(event.start);
+      const eventEnd = event.end ? new Date(event.end) : new Date(eventStart.getTime() + 60 * 60 * 1000);
+      
+      // Validate dates
+      if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
+        return [];
+      }
+
+      const baseUid = event.uid || 'unknown';
+      const isAllDay = !!(
+        event.datetype === 'date' ||
+        (eventStart.getHours() === 0 && eventStart.getMinutes() === 0 && 
+         eventEnd.getHours() === 0 && eventEnd.getMinutes() === 0)
+      );
+
+      // If no recurrence, just add single event if in range
+      if (!event.rrule) {
+        if (eventStart >= rangeStart && eventStart <= rangeEnd) {
+          return [{
+            id: this.makeOccurrenceId(baseUid, eventStart),
+            title: event.summary || "Untitled Event",
+            start: eventStart,
+            end: eventEnd,
+            location: event.location || null,
+            description: event.description || null,
+            isAllDay
+          }];
+        }
+        return [];
+      }
+
+      // Simple recurring event expansion (weekly meetings only)
+      const instances: InsertCalendarEvent[] = [];
+      if (event.rrule.freq === 'WEEKLY') {
+        let currentDate = new Date(eventStart);
+        const duration = eventEnd.getTime() - eventStart.getTime();
+        let instanceCount = 0;
+        const maxInstances = 100; // Limit instances per event
+
+        while (currentDate <= rangeEnd && instanceCount < maxInstances) {
+          if (currentDate >= rangeStart) {
+            const instanceEnd = new Date(currentDate.getTime() + duration);
+            instances.push({
+              id: this.makeOccurrenceId(baseUid, currentDate),
+              title: event.summary || "Untitled Event",
+              start: new Date(currentDate),
+              end: instanceEnd,
+              location: event.location || null,
+              description: event.description || null,
+              isAllDay
+            });
+            instanceCount++;
+          }
+          // Move to next week
+          currentDate.setDate(currentDate.getDate() + 7);
+        }
+      } else if (eventStart >= rangeStart && eventStart <= rangeEnd) {
+        // For other recurrence types, just add the base event
+        instances.push({
+          id: this.makeOccurrenceId(baseUid, eventStart),
+          title: event.summary || "Untitled Event",
+          start: eventStart,
+          end: eventEnd,
+          location: event.location || null,
+          description: event.description || null,
+          isAllDay
+        });
+      }
+
+      return instances;
+    } catch (error) {
+      console.error(`[CalendarV2] Error expanding event:`, error);
+      return [];
+    }
   }
 
   private async upsertEvent(ev: InsertCalendarEvent): Promise<void> {
@@ -205,79 +281,49 @@ export class CalendarServiceV2 {
       const ics = await res.text();
       console.info(`[CalendarV2] Downloaded ${(ics.length / 1024 / 1024).toFixed(2)} MB of ICS`);
 
-      // Prepare expander once; expand in month slices to keep memory flat
-      const expander = new IcalExpander({ ics, maxIterations: 1000000 });
+      // Parse with memory-efficient node-ical
+      const parsedCal = ical.parseICS(ics);
+      console.info(`[CalendarV2] Parsed ${Object.keys(parsedCal).length} calendar objects`);
 
       // We track what we touched so we can prune stale rows in-range
       const touchedIds = new Set<string>();
 
-      // Expand and write per slice
-      for (const slice of this.monthSlices(rangeStart, rangeEnd)) {
-        const { events, occurrences } = expander.between(slice.start, slice.end);
+      // Process each calendar object
+      let processedCount = 0;
+      const maxEvents = 1000; // Conservative limit for memory
 
-        // Non-recurring events that fall in this window
-        for (const e of events) {
-          const start = e.startDate.toJSDate();
-          const end = e.endDate.toJSDate();
-          const id = this.makeOccurrenceId(e.uid, start);
+      for (const [key, event] of Object.entries(parsedCal)) {
+        if (processedCount >= maxEvents) {
+          console.info(`[CalendarV2] Reached maximum event limit (${maxEvents}), stopping`);
+          break;
+        }
 
-          const record: InsertCalendarEvent = {
-            id,
-            title: e.summary || "Untitled Event",
-            start,
-            end,
-            location: e.location ?? null,
-            description: e.description ?? null,
-            isAllDay: this.isAllDayFromExpander(e)
-          };
+        if (event.type !== 'VEVENT') continue;
 
+        // Expand recurring events using custom logic
+        const expandedEvents = this.expandRecurringEvent(event, rangeStart, rangeEnd);
+        
+        for (const expandedEvent of expandedEvents) {
+          if (processedCount >= maxEvents) break;
+          
           try {
-            await this.upsertEvent(record);
-            touchedIds.add(id);
+            await this.upsertEvent(expandedEvent);
+            touchedIds.add(expandedEvent.id);
             stats.eventsStored++;
             stats.eventsFound++;
             stats.totalParsed++;
+            processedCount++;
           } catch (err) {
             stats.errors++;
             stats.errorMessages.push(String(err));
-            console.error("[CalendarV2] Upsert failed (single):", id, err);
+            console.error("[CalendarV2] Upsert failed:", expandedEvent.id, err);
           }
         }
 
-        // Recurring occurrences in this window (exceptions folded in)
-        for (const o of occurrences) {
-          const start = o.startDate.toJSDate();
-          const end = o.endDate.toJSDate();
-          const id = this.makeOccurrenceId(o.item.uid, start);
-
-          const record: InsertCalendarEvent = {
-            id,
-            title: o.item.summary || "Untitled Event",
-            start,
-            end,
-            location: o.item.location ?? null,
-            description: o.item.description ?? null,
-            isAllDay: this.isAllDayFromExpander(o)
-          };
-
-          try {
-            await this.upsertEvent(record);
-            touchedIds.add(id);
-            stats.eventsStored++;
-            stats.eventsFound++;
-            stats.totalParsed++;
-          } catch (err) {
-            stats.errors++;
-            stats.errorMessages.push(String(err));
-            console.error("[CalendarV2] Upsert failed (occurrence):", id, err);
-          }
+        // Memory management
+        if (processedCount % 50 === 0 && global.gc) {
+          global.gc();
         }
-
-        // Release slice arrays and nudge GC if available
-        (events as any).length = 0;
-        (occurrences as any).length = 0;
-        // @ts-ignore
-        if (global.gc) global.gc();
       }
 
       // Prune stale rows that are inside our range but were not touched this run
