@@ -140,7 +140,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
           variant="ghost" 
           size="icon"
           onClick={onSetupCalendar}
-          className="text-gray-400 hover:text-white hover:bg-gray-700"
+          className="text-gray-400 hover:text-white hover:bg-gray-700 pl-[8px] pr-[8px] pt-[0px] pb-[0px]"
           data-testid="button-settings"
         >
           <Settings className="h-4 w-4" />
