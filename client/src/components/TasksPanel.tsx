@@ -272,7 +272,7 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
                   {completedTasks.map((task) => (
                     <div
                       key={task.id}
-                      className="rounded-xl p-4 hover:bg-gray-800/50 transition-colors opacity-60 bg-[#2d2d2da1]"
+                      className="rounded-xl p-4 hover:bg-gray-800/50 transition-colors opacity-60 bg-[#2d2d2da1] pl-[14px] pr-[14px] pt-[14px] pb-[14px]"
                       data-testid={`task-card-completed-${task.id}`}
                     >
                       <div className="flex items-start justify-between">
