@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import TasksPanel from "@/components/TasksPanel";
@@ -15,8 +15,11 @@ export default function Dashboard() {
   const [showCalendarSetup, setShowCalendarSetup] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [tasksPanelWidth, setTasksPanelWidth] = useState(400);
+  const [isResizing, setIsResizing] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['/api/tasks'],
@@ -57,18 +60,70 @@ export default function Dashboard() {
     planDayMutation.mutate(dateString);
   };
 
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing || !containerRef.current) return;
+    
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const newWidth = e.clientX - containerRect.left;
+    
+    // Constrain width between 280px and 600px
+    const clampedWidth = Math.max(280, Math.min(600, newWidth));
+    setTasksPanelWidth(clampedWidth);
+  }, [isResizing]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  // Add event listeners for mouse move and mouse up
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, handleMouseMove, handleMouseUp]);
+
   return (
     <div className="h-screen bg-black flex">
       {/* Main Content */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex" ref={containerRef}>
         {/* Tasks Panel - Left */}
-        <div className="w-[400px] flex-shrink-0">
+        <div 
+          className="flex-shrink-0 relative"
+          style={{ width: `${tasksPanelWidth}px` }}
+        >
           <TasksPanel 
             tasks={tasks} 
             isLoading={tasksLoading}
             onAddTask={() => setShowAddTask(true)}
             onSetupCalendar={() => setShowCalendarSetup(true)}
             onPlanDay={handlePlanDay}
+          />
+          
+          {/* Resize Handle */}
+          <div
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-gray-600/50 transition-colors z-50"
+            onMouseDown={handleMouseDown}
+            data-testid="resize-handle-tasks-panel"
           />
         </div>
 
