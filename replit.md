@@ -6,8 +6,8 @@ My Day is an AI-first daily planning assistant that combines calendar integratio
 - **✅ RESOLVED: Calendar Sync Memory Issues** - Successfully fixed all memory crashes and parsing errors for large calendars
   - Fixed node-ical import issue that was preventing calendar parsing
   - Optimized calendar processing to handle 25MB+ files (3,000+ events) without crashes  
-  - **EXPANDED: Enhanced Calendar Coverage** - Increased from 90 to 500 events with better recurring meeting detection
-  - Date range expanded from 2 months to 8 months (2 months back, 6 months forward) for comprehensive coverage
+  - **EXPANDED: Enhanced Calendar Coverage** - Increased from 90 to 500 events with better recurring meeting detection  
+  - **CORRECTED: Fixed Date Range Filtering** - Now shows past 9 months and future 3 months (Nov 2024 - Nov 2025) instead of old 2020-2023 events
   - Added intelligent recurring event detection for meetings created long ago but still active
   - Successfully processing and storing 500 events from 3,393 total calendar items
   - Added comprehensive logging and error handling for better debugging
