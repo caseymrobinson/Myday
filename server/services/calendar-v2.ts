@@ -1,29 +1,18 @@
-import ical from "node-ical";
+// Calendar sync with recurrence expansion, low memory, and idempotent writes.
+
+/// <reference lib="dom" />
 // @ts-ignore - No type definitions available
 import IcalExpander from "ical-expander";
 import { storage } from "../storage";
 import { type InsertCalendarEvent } from "@shared/schema";
-import cron from "node-cron";
-import crypto from "crypto";
-
-interface ParsedEvent {
-  uid: string;
-  title: string;
-  start: Date;
-  end: Date;
-  location?: string;
-  description?: string;
-  isAllDay: boolean;
-  recurringId?: string;
-  hash: string;
-}
+import * as cron from "node-cron";
 
 interface SyncStats {
-  totalParsed: number;
-  eventsFound: number;
-  eventsStored: number;
-  eventsSkipped: number;
-  errors: number;
+  totalParsed: number;        // occurrences considered for write
+  eventsFound: number;        // occurrences discovered in range
+  eventsStored: number;       // successfully upserted
+  eventsSkipped: number;      // filtered or malformed
+  errors: number;             // write failures
   startTime: Date;
   endTime?: Date;
   errorMessages: string[];
@@ -32,8 +21,13 @@ interface SyncStats {
 export class CalendarServiceV2 {
   private icsUrl: string | null = null;
   private isRunning = false;
-  private lastSyncHash: string | null = null;
-  private cronJob: any = null; // cron.ScheduledTask
+  private cronJob: cron.ScheduledTask | null = null;
+
+  // Range config
+  private readonly pastMonths = 9;
+  private readonly futureMonths = 3;
+
+  // Status snapshot (for UI/debug)
   private syncStatus = {
     lastSync: null as Date | null,
     syncing: false,
@@ -43,34 +37,26 @@ export class CalendarServiceV2 {
   };
 
   constructor() {
-    // Initialize calendar URL but don't start cron job automatically
-    this.initializeCalendarUrl();
+    // Ensure URL is loaded before starting a cron or first sync
+    void this.initializeCalendarUrl().then(() => this.startCronJob());
   }
 
   private async initializeCalendarUrl() {
     try {
-      const storedUrl = await storage.getSetting('calendar_url');
+      const storedUrl = await storage.getSetting("calendar_url");
       if (storedUrl) {
         this.icsUrl = storedUrl;
-        console.log('[CalendarV2] Loaded calendar URL from database');
-        // Don't auto-start cron job to prevent startup crashes
-        // this.startCronJob();
+        console.info("[CalendarV2] Loaded calendar URL from settings");
       }
     } catch (error) {
-      console.error('[CalendarV2] Failed to initialize:', error);
+      console.error("[CalendarV2] Failed to initialize URL:", error);
     }
   }
 
   async setIcsUrl(url: string): Promise<void> {
-    console.log('[CalendarV2] Setting new calendar URL');
     this.icsUrl = url;
-    await storage.setSetting('calendar_url', url);
-    
-    // Restart cron job with new URL
-    this.stopCronJob();
-    this.startCronJob();
-    
-    // Trigger immediate sync
+    await storage.setSetting("calendar_url", url);
+    this.restartCron();
     await this.syncCalendar();
   }
 
@@ -89,130 +75,94 @@ export class CalendarServiceV2 {
   }
 
   async removeCalendar(): Promise<void> {
-    console.log('[CalendarV2] Removing calendar');
     this.icsUrl = null;
     this.stopCronJob();
-    
-    await storage.setSetting('calendar_url', '');
+    await storage.setSetting("calendar_url", "");
     await storage.clearCalendarEvents();
-    
-    console.log('[CalendarV2] Calendar removed and events cleared');
+    this.syncStatus = {
+      lastSync: new Date(),
+      syncing: false,
+      totalEvents: 0,
+      storedEvents: 0,
+      error: null
+    };
+    console.info("[CalendarV2] Calendar removed and events cleared");
+  }
+
+  // ---------- Cron management ----------
+
+  private restartCron() {
+    this.stopCronJob();
+    this.startCronJob();
   }
 
   private startCronJob() {
     if (!this.icsUrl) return;
-    
-    // Stop existing job if any
-    this.stopCronJob();
-    
+
     // Run every 15 minutes
     this.cronJob = cron.schedule("*/15 * * * *", async () => {
       if (this.icsUrl && !this.isRunning) {
-        console.log('[CalendarV2] Starting scheduled sync');
+        console.info("[CalendarV2] Starting scheduled sync");
         await this.syncCalendar();
       }
     });
-    
-    console.log('[CalendarV2] Cron job started');
-    
-    // Initial sync after 2 seconds
-    setTimeout(() => {
-      if (this.icsUrl) {
-        this.syncCalendar();
-      }
-    }, 2000);
+
+    console.info("[CalendarV2] Cron job started");
+    // Initial sync shortly after startup
+    setTimeout(() => void this.syncCalendar(), 1500);
   }
 
   private stopCronJob() {
     if (this.cronJob) {
       this.cronJob.stop();
       this.cronJob = null;
-      console.log('[CalendarV2] Cron job stopped');
+      console.info("[CalendarV2] Cron job stopped");
     }
   }
 
-  private generateEventHash(event: any): string {
-    const data = `${event.uid}-${event.summary}-${event.start}-${event.end}-${event.location}-${event.description}`;
-    return crypto.createHash('md5').update(data).digest('hex');
+  // ---------- Core sync ----------
+
+  private makeOccurrenceId(uid: string, start: Date): string {
+    // Stable, per-occurrence ID; normalize with ISO-UTC
+    return `${uid}::${start.toISOString()}`;
   }
 
-  private expandEventInstances(event: any, startDate: Date, endDate: Date): InsertCalendarEvent[] {
+  private monthSlices(from: Date, to: Date): Array<{ start: Date; end: Date }> {
+    const slices: Array<{ start: Date; end: Date }> = [];
+    const cursor = new Date(from.getFullYear(), from.getMonth(), 1);
+    const endCap = new Date(to.getFullYear(), to.getMonth(), 1);
+
+    while (cursor <= endCap) {
+      const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+      slices.push({ start, end });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return slices;
+  }
+
+  private isAllDayFromExpander(obj: any): boolean {
+    // ical-expander exposes ICAL.Time via startDate; all-day events have isDate === true
+    return !!(obj?.startDate?.isDate === true);
+  }
+
+  private async upsertEvent(ev: InsertCalendarEvent): Promise<void> {
     try {
-      if (!event.start) return [];
-      
-      const eventStart = new Date(event.start);
-      const eventEnd = event.end ? new Date(event.end) : new Date(eventStart.getTime() + 60 * 60 * 1000);
-      
-      // Validate dates
-      if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
-        return [];
+      await storage.createCalendarEvent(ev); // should be an UPSERT in DB storage
+    } catch (e) {
+      // Fallback: if storage lacks UPSERT, try update
+      try {
+        await storage.updateCalendarEvent(ev.id, {
+          title: ev.title,
+          start: ev.start,
+          end: ev.end,
+          location: ev.location ?? null,
+          description: ev.description ?? null,
+          isAllDay: ev.isAllDay
+        } as any);
+      } catch (e2) {
+        throw e2;
       }
-      
-      const baseUid = event.uid || 'unknown';
-      const isAllDay = !!(
-        event.datetype === 'date' ||
-        (eventStart.getHours() === 0 && eventStart.getMinutes() === 0 && 
-         eventEnd.getHours() === 0 && eventEnd.getMinutes() === 0)
-      );
-      
-      // If no recurrence, just add single event if in range
-      if (!event.rrule) {
-        if (eventStart >= startDate && eventStart <= endDate) {
-          return [{
-            id: `${baseUid}_${eventStart.getTime()}`,
-            title: event.summary || "Untitled Event",
-            start: eventStart,
-            end: eventEnd,
-            location: event.location || null,
-            description: event.description || null,
-            isAllDay
-          }];
-        }
-        return [];
-      }
-      
-      // Simple recurring event expansion (weekly meetings only to avoid complexity)
-      const instances: InsertCalendarEvent[] = [];
-      if (event.rrule.freq === 'WEEKLY') {
-        let currentDate = new Date(eventStart);
-        const duration = eventEnd.getTime() - eventStart.getTime();
-        let instanceCount = 0;
-        const maxInstances = 50; // Limit instances per event
-        
-        while (currentDate <= endDate && instanceCount < maxInstances) {
-          if (currentDate >= startDate) {
-            const instanceEnd = new Date(currentDate.getTime() + duration);
-            instances.push({
-              id: `${baseUid}_${currentDate.getTime()}`,
-              title: event.summary || "Untitled Event", 
-              start: new Date(currentDate),
-              end: instanceEnd,
-              location: event.location || null,
-              description: event.description || null,
-              isAllDay
-            });
-            instanceCount++;
-          }
-          // Move to next week
-          currentDate.setDate(currentDate.getDate() + 7);
-        }
-      } else if (eventStart >= startDate && eventStart <= endDate) {
-        // For other recurrence types, just add the base event
-        instances.push({
-          id: `${baseUid}_${eventStart.getTime()}`,
-          title: event.summary || "Untitled Event",
-          start: eventStart,
-          end: eventEnd,
-          location: event.location || null,
-          description: event.description || null,
-          isAllDay
-        });
-      }
-      
-      return instances;
-    } catch (error) {
-      console.error(`[CalendarV2] Error expanding event:`, error);
-      return [];
     }
   }
 
@@ -228,198 +178,186 @@ export class CalendarServiceV2 {
     };
 
     if (!this.icsUrl || this.isRunning) {
-      stats.errorMessages.push('Sync already running or no URL configured');
+      stats.errorMessages.push("Sync already running or no URL configured");
       return stats;
     }
 
     this.isRunning = true;
-    
+    this.syncStatus.syncing = true;
+    this.syncStatus.error = null;
+
     try {
-      console.log(`[CalendarV2] Fetching calendar from: ${this.icsUrl}`);
-      console.log(`[CalendarV2] Sync started at: ${stats.startTime.toISOString()}`);
-      
-      // Fetch raw iCal data with size limit
-      const response = await fetch(this.icsUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      // Log content size for monitoring
-      const contentLength = response.headers.get('content-length');
-      if (contentLength) {
-        console.log(`[CalendarV2] Calendar file size: ${Math.round(parseInt(contentLength) / 1024 / 1024)}MB`);
-      }
-      
-      const icalString = await response.text();
-      console.log(`[CalendarV2] Downloaded ${Math.round(icalString.length / 1024)}KB of iCal data`);
-      
-      // Use hybrid approach: node-ical parsing + selective recurrence expansion
-      console.log('[CalendarV2] Parsing iCal data with selective expansion...');
-      const parsedCal = ical.parseICS(icalString);
-      console.log(`[CalendarV2] Found ${Object.keys(parsedCal).length} calendar items`);
-      
       const now = new Date();
-      // Past 3 months and future 6 months for reasonable coverage
-      const startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 7, 0);
-      
-      const calendarEvents: InsertCalendarEvent[] = [];
-      let processedCount = 0;
-      const maxEvents = 1500; // Higher limit since we're managing memory better
-      
-      // Process events with selective recurrence expansion
-      for (const [key, event] of Object.entries(parsedCal)) {
-        if (processedCount >= maxEvents) {
-          console.log(`[CalendarV2] Reached maximum event limit (${maxEvents}), stopping`);
-          break;
-        }
-        
-        if (event.type !== 'VEVENT') continue;
-        
-        const expandedEvents = this.expandEventInstances(event, startDate, endDate);
-        for (const expandedEvent of expandedEvents) {
-          if (processedCount >= maxEvents) break;
-          calendarEvents.push(expandedEvent);
-          processedCount++;
-        }
-        
-        // Memory management
-        if (processedCount % 100 === 0 && global.gc) {
-          global.gc();
-        }
+      const rangeStart = new Date(now);
+      rangeStart.setMonth(rangeStart.getMonth() - this.pastMonths);
+      const rangeEnd = new Date(now);
+      rangeEnd.setMonth(rangeEnd.getMonth() + this.futureMonths);
+
+      console.info(
+        `[CalendarV2] Sync window ${rangeStart.toISOString()} -> ${rangeEnd.toISOString()}`
+      );
+
+      // Download ICS once
+      const res = await fetch(this.icsUrl);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}`);
       }
-      
-      console.log(`[CalendarV2] Processed ${processedCount} events with selective expansion`);
-      
-      stats.eventsFound = calendarEvents.length;
-      console.log(`[CalendarV2] Processed ${stats.eventsFound} events from calendar`);
-      console.log(`[CalendarV2] Date range: ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
-      console.log(`[CalendarV2] Total processed: ${processedCount} events checked`);
-      
-      // Calculate hash for change detection
-      const currentHash = crypto.createHash('md5')
-        .update(calendarEvents.map(e => `${e.id}-${e.title}-${e.start.getTime()}`).sort().join('|'))
-        .digest('hex');
-      
-      // Check if data has changed
-      if (this.lastSyncHash === currentHash) {
-        console.log('[CalendarV2] No changes detected, skipping database update');
-        stats.eventsSkipped = stats.eventsFound;
-        stats.endTime = new Date();
-        return stats;
-      }
-      
-      console.log('[CalendarV2] Changes detected, updating database');
-      
-      // Clear existing events and insert new ones (simpler approach for fewer events)
-      console.log('[CalendarV2] Clearing existing events...');
-      await storage.clearCalendarEvents();
-      console.log('[CalendarV2] Existing events cleared, inserting new events...');
-      
-      // Insert events in small batches
-      const batchSize = 100;
-      let processed = 0;
-      
-      for (let i = 0; i < calendarEvents.length; i += batchSize) {
-        const batch = calendarEvents.slice(i, i + batchSize);
-        
-        try {
-          for (const event of batch) {
-            await storage.createCalendarEvent(event);
-            processed++;
+      const ics = await res.text();
+      console.info(`[CalendarV2] Downloaded ${(ics.length / 1024 / 1024).toFixed(2)} MB of ICS`);
+
+      // Prepare expander once; expand in month slices to keep memory flat
+      const expander = new IcalExpander({ ics, maxIterations: 1000000 });
+
+      // We track what we touched so we can prune stale rows in-range
+      const touchedIds = new Set<string>();
+
+      // Expand and write per slice
+      for (const slice of this.monthSlices(rangeStart, rangeEnd)) {
+        const { events, occurrences } = expander.between(slice.start, slice.end);
+
+        // Non-recurring events that fall in this window
+        for (const e of events) {
+          const start = e.startDate.toJSDate();
+          const end = e.endDate.toJSDate();
+          const id = this.makeOccurrenceId(e.uid, start);
+
+          const record: InsertCalendarEvent = {
+            id,
+            title: e.summary || "Untitled Event",
+            start,
+            end,
+            location: e.location ?? null,
+            description: e.description ?? null,
+            isAllDay: this.isAllDayFromExpander(e)
+          };
+
+          try {
+            await this.upsertEvent(record);
+            touchedIds.add(id);
+            stats.eventsStored++;
+            stats.eventsFound++;
+            stats.totalParsed++;
+          } catch (err) {
+            stats.errors++;
+            stats.errorMessages.push(String(err));
+            console.error("[CalendarV2] Upsert failed (single):", id, err);
           }
-          
-          console.log(`[CalendarV2] Progress: ${processed}/${calendarEvents.length} events stored`);
-          
-          // Trigger garbage collection every batch
-          if (global.gc) {
-            global.gc();
-          }
-        } catch (error) {
-          console.error(`[CalendarV2] Failed to store batch:`, error);
-          stats.errors++;
-          stats.errorMessages.push(`Failed to store batch: ${error}`);
         }
+
+        // Recurring occurrences in this window (exceptions folded in)
+        for (const o of occurrences) {
+          const start = o.startDate.toJSDate();
+          const end = o.endDate.toJSDate();
+          const id = this.makeOccurrenceId(o.item.uid, start);
+
+          const record: InsertCalendarEvent = {
+            id,
+            title: o.item.summary || "Untitled Event",
+            start,
+            end,
+            location: o.item.location ?? null,
+            description: o.item.description ?? null,
+            isAllDay: this.isAllDayFromExpander(o)
+          };
+
+          try {
+            await this.upsertEvent(record);
+            touchedIds.add(id);
+            stats.eventsStored++;
+            stats.eventsFound++;
+            stats.totalParsed++;
+          } catch (err) {
+            stats.errors++;
+            stats.errorMessages.push(String(err));
+            console.error("[CalendarV2] Upsert failed (occurrence):", id, err);
+          }
+        }
+
+        // Release slice arrays and nudge GC if available
+        (events as any).length = 0;
+        (occurrences as any).length = 0;
+        // @ts-ignore
+        if (global.gc) global.gc();
       }
-      
-      stats.eventsStored = processed;
-      
-      // Update last sync hash
-      this.lastSyncHash = currentHash;
-      
-      // Update sync status
+
+      // Prune stale rows that are inside our range but were not touched this run
+      try {
+        const all = await storage.getCalendarEvents();
+        for (const row of all) {
+          const s = new Date(row.start);
+          if (s >= rangeStart && s < rangeEnd) {
+            if (!touchedIds.has(row.id)) {
+              await storage.deleteCalendarEvent(row.id);
+            }
+          }
+        }
+      } catch (pruneErr) {
+        // Non-fatal; log and continue
+        console.warn("[CalendarV2] Prune failed:", pruneErr);
+      }
+
       this.syncStatus.lastSync = new Date();
       this.syncStatus.totalEvents = stats.eventsFound;
       this.syncStatus.storedEvents = stats.eventsStored;
-      this.syncStatus.syncing = false;
-      this.syncStatus.error = null;
-      
-      // Log summary
-      console.log('[CalendarV2] ============ SYNC SUMMARY ============');
-      console.log(`[CalendarV2] Events processed: ${stats.eventsFound}`);
-      console.log(`[CalendarV2] Events stored: ${stats.eventsStored}`);
-      console.log(`[CalendarV2] Storage errors: ${stats.errors}`);
-      console.log('[CalendarV2] ======================================');
-      
+
+      console.info(
+        `[CalendarV2] Sync done. Stored ${stats.eventsStored}/${stats.eventsFound}. Errors: ${stats.errors}`
+      );
     } catch (error) {
-      console.error('[CalendarV2] Sync failed:', error);
       stats.errors++;
-      stats.errorMessages.push(`Sync failed: ${error}`);
-      this.syncStatus.error = `Sync failed: ${error}`;
+      stats.errorMessages.push(String(error));
+      this.syncStatus.error = String(error);
+      console.error("[CalendarV2] Sync failed:", error);
     } finally {
       this.isRunning = false;
       this.syncStatus.syncing = false;
       stats.endTime = new Date();
-      const duration = (stats.endTime.getTime() - stats.startTime.getTime()) / 1000;
-      console.log(`[CalendarV2] Sync completed in ${duration.toFixed(2)} seconds`);
+      const sec = (stats.endTime.getTime() - stats.startTime.getTime()) / 1000;
+      console.info(`[CalendarV2] Sync completed in ${sec.toFixed(2)}s`);
     }
-    
+
     return stats;
   }
 
+  // ---------- Query helpers for the UI ----------
+
   async getEventsForDate(date: string): Promise<any[]> {
     const events = await storage.getCalendarEvents();
-    const targetDate = new Date(date);
-    const targetDateStr = targetDate.toDateString();
-    
+    const target = new Date(date).toDateString();
+
     return events
-      .filter(event => {
-        const eventDate = new Date(event.start);
-        return eventDate.toDateString() === targetDateStr;
-      })
+      .filter(e => new Date(e.start).toDateString() === target)
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
-      .map(event => ({
-        id: event.id,
-        title: event.title,
-        start: event.start.toISOString(),
-        end: event.end.toISOString(),
-        location: event.location,
-        description: event.description,
-        isAllDay: event.isAllDay
+      .map(e => ({
+        id: e.id,
+        title: e.title,
+        start: new Date(e.start).toISOString(),
+        end: new Date(e.end).toISOString(),
+        location: e.location,
+        description: e.description,
+        isAllDay: e.isAllDay
       }));
   }
 
   async getEventsInRange(startDate: Date, endDate: Date): Promise<any[]> {
     const events = await storage.getCalendarEvents();
-    
+
     return events
-      .filter(event => {
-        const eventStart = new Date(event.start);
-        return eventStart >= startDate && eventStart <= endDate;
+      .filter(e => {
+        const s = new Date(e.start);
+        return s >= startDate && s <= endDate;
       })
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
-      .map(event => ({
-        id: event.id,
-        title: event.title,
-        start: event.start.toISOString(),
-        end: event.end.toISOString(),
-        location: event.location,
-        description: event.description,
-        isAllDay: event.isAllDay
+      .map(e => ({
+        id: e.id,
+        title: e.title,
+        start: new Date(e.start).toISOString(),
+        end: new Date(e.end).toISOString(),
+        location: e.location,
+        description: e.description,
+        isAllDay: e.isAllDay
       }));
   }
-
-
 }
 
 // Export singleton instance

@@ -3,26 +3,18 @@
 My Day is an AI-first daily planning assistant that combines calendar integration, intelligent task scheduling, and natural language interaction to help users manage their day effectively. The application provides a unified three-pane interface (tasks, calendar, and chat) with features like Google Calendar integration via iCal URL, smart task management with multiple sources (manual, Slack, AI), AI-powered scheduling suggestions, and natural language chat capabilities.
 
 ## Recent Changes (Aug 17, 2025)
-- **✅ RESOLVED: Calendar Sync Memory Issues** - Successfully fixed all memory crashes and parsing errors for large calendars
-  - Fixed node-ical import issue that was preventing calendar parsing
-  - Optimized calendar processing to handle 25MB+ files (3,000+ events) without crashes  
-  - **EXPANDED: Enhanced Calendar Coverage** - Increased from 90 to 500 events with better recurring meeting detection  
-  - **CORRECTED: Fixed Date Range Filtering** - Now shows past 9 months and future 3 months (Nov 2024 - Nov 2025) instead of old 2020-2023 events
-  - **✅ RESOLVED: Calendar Database Write Issue** - Fixed hash comparison bug preventing events from being stored
-  - **✅ RESOLVED: Recurrence Expansion & ID Collisions** - Implemented hybrid approach using node-ical + selective recurrence expansion
-    - Fixed recurring meeting expansion (weekly meetings from 2022+ now show current instances)
-    - Fixed per-occurrence unique IDs (format: `${baseUid}_${timestamp}`) to prevent database collisions
-    - Memory-safe processing: 424 events stored from 3,393 total without memory crashes
-  - **FINAL: Calendar Fully Functional** - All major issues resolved, calendar displays current and recurring events correctly
-  - Added intelligent recurring event detection for meetings created long ago but still active
-  - Successfully processing and storing 500 events from 3,393 total calendar items
-  - Added comprehensive logging and error handling for better debugging
-  - Calendar sync now completes in ~55 seconds without memory issues
-- **Fixed Calendar Missing Events Issue** - Calendar sync was working correctly but default date showed August 2025 (no events)
-  - Calendar contains real events from 2018-2025, latest events in January 2025
-  - Changed default date to December 2, 2024 to show actual calendar data with meetings
-  - Calendar sync successfully imports all 3384+ events from Google Calendar iCal feed
-  - System now displays real meetings like "user testing" and "Team v Scenario Planning"
+- **✅ COMPLETED: Full Calendar Service Rewrite** - User implemented complete calendar-v2.ts rewrite with advanced memory management
+  - **Month-based processing**: Events processed in monthly slices to prevent memory crashes with 25MB+ calendars
+  - **Proper recurrence expansion**: Uses ical-expander with controlled iterations and slice-based processing
+  - **Unique occurrence IDs**: Format `${uid}::${start.toISOString()}` prevents database collisions for recurring events
+  - **Upsert logic**: Intelligent event creation with update fallback for data consistency
+  - **Memory optimization**: Successfully processes 3,393 calendar items, stores 498 relevant events
+  - **Comprehensive error handling**: Detailed sync statistics and error tracking
+  - **Cron automation**: 15-minute sync intervals with proper job management
+- **✅ VERIFIED: Current Events Display** - Calendar shows real meetings for August 2025
+  - Today's events visible: "Steering Committee Feedback", "Discoverability stuff", "Cards Group Leads"
+  - Date range: Past 9 months to future 3 months (Nov 2024 - Nov 2025)
+  - All events properly stored with correct times and details
 
 ## Previous Changes (Aug 16, 2025)
 - **Dynamic AI Prompt Visibility** - Floating AI chat bubble now intelligently hides when chat panel is open and shows when closed for clean, non-redundant interface
