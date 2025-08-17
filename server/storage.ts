@@ -1,4 +1,10 @@
-import { type Task, type InsertTask, type FocusBlock, type InsertFocusBlock, type CalendarEvent, type InsertCalendarEvent, type Setting, type InsertSetting, tasks, focusBlocks, calendarEvents, settings } from "@shared/schema";
+import {
+  type Task, type InsertTask,
+  type FocusBlock, type InsertFocusBlock,
+  type CalendarEvent, type InsertCalendarEvent,
+  type Setting, type InsertSetting,
+  tasks, focusBlocks, calendarEvents, settings
+} from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
@@ -12,7 +18,7 @@ export interface IStorage {
   deleteTask(id: string): Promise<boolean>;
 
   // Focus Blocks
-  getFocusBlocks(): Promise<FocusBlock[]>;
+  getFocusBlocks(): Promise<(FocusBlock & { taskTitle?: string })[]>;
   getFocusBlock(id: string): Promise<FocusBlock | undefined>;
   createFocusBlock(focusBlock: InsertFocusBlock): Promise<FocusBlock>;
   updateFocusBlock(id: string, updates: Partial<InsertFocusBlock>): Promise<FocusBlock | undefined>;
@@ -21,11 +27,11 @@ export interface IStorage {
   // Calendar Events
   getCalendarEvents(): Promise<CalendarEvent[]>;
   getCalendarEvent(id: string): Promise<CalendarEvent | undefined>;
-  createCalendarEvent(event: InsertCalendarEvent): Promise<CalendarEvent>;
+  createCalendarEvent(event: InsertCalendarEvent): Promise<CalendarEvent>;  // UPSERT semantics expected
   updateCalendarEvent(id: string, updates: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined>;
   deleteCalendarEvent(id: string): Promise<boolean>;
   clearCalendarEvents(): Promise<void>;
-  
+
   // Settings
   getSetting(key: string): Promise<string | undefined>;
   setSetting(key: string, value: string): Promise<void>;
@@ -35,6 +41,7 @@ export class MemStorage implements IStorage {
   private tasks: Map<string, Task>;
   private focusBlocks: Map<string, FocusBlock>;
   private calendarEvents: Map<string, CalendarEvent>;
+  private settings: Map<string, string> = new Map();
 
   constructor() {
     this.tasks = new Map();
@@ -44,7 +51,7 @@ export class MemStorage implements IStorage {
   }
 
   private seedData() {
-    // Seed some sample tasks if no calendar URL is provided
+    // Seed some sample tasks
     const sampleTasks: Task[] = [
       {
         id: randomUUID(),
@@ -75,10 +82,9 @@ export class MemStorage implements IStorage {
         updatedAt: new Date()
       }
     ];
-
     sampleTasks.forEach(task => this.tasks.set(task.id, task));
 
-    // Seed some sample meetings if no calendar URL
+    // Seed sample meetings
     const today = new Date();
     const sampleEvents: CalendarEvent[] = [
       {
@@ -102,7 +108,6 @@ export class MemStorage implements IStorage {
         lastSync: new Date()
       }
     ];
-
     sampleEvents.forEach(event => this.calendarEvents.set(event.id, event));
   }
 
@@ -118,19 +123,19 @@ export class MemStorage implements IStorage {
   async createTask(insertTask: InsertTask): Promise<Task> {
     const id = randomUUID();
     const now = new Date();
-    const task: Task = { 
-      id, 
+    const task: Task = {
+      id,
       title: insertTask.title,
-      source: insertTask.source || 'manual',
-      status: insertTask.status || 'pending',
+      source: insertTask.source || "manual",
+      status: insertTask.status || "pending",
       priority: insertTask.priority || 2,
       dueAt: insertTask.dueAt || null,
       estimateMins: insertTask.estimateMins || null,
       url: insertTask.url || null,
       context: insertTask.context || null,
       aiSuggested: insertTask.aiSuggested || false,
-      createdAt: now, 
-      updatedAt: now 
+      createdAt: now,
+      updatedAt: now
     };
     this.tasks.set(id, task);
     return task;
@@ -139,12 +144,7 @@ export class MemStorage implements IStorage {
   async updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined> {
     const task = this.tasks.get(id);
     if (!task) return undefined;
-    
-    const updatedTask: Task = { 
-      ...task, 
-      ...updates, 
-      updatedAt: new Date() 
-    };
+    const updatedTask: Task = { ...task, ...updates, updatedAt: new Date() };
     this.tasks.set(id, updatedTask);
     return updatedTask;
   }
@@ -158,10 +158,7 @@ export class MemStorage implements IStorage {
     const focusBlockList = Array.from(this.focusBlocks.values());
     return focusBlockList.map(block => {
       const task = this.tasks.get(block.taskId);
-      return {
-        ...block,
-        taskTitle: task?.title
-      };
+      return { ...block, taskTitle: task?.title };
     });
   }
 
@@ -171,13 +168,13 @@ export class MemStorage implements IStorage {
 
   async createFocusBlock(insertFocusBlock: InsertFocusBlock): Promise<FocusBlock> {
     const id = randomUUID();
-    const focusBlock: FocusBlock = { 
+    const focusBlock: FocusBlock = {
       id,
       taskId: insertFocusBlock.taskId,
       start: insertFocusBlock.start,
       end: insertFocusBlock.end,
       confirmed: insertFocusBlock.confirmed || false,
-      createdAt: new Date() 
+      createdAt: new Date()
     };
     this.focusBlocks.set(id, focusBlock);
     return focusBlock;
@@ -186,11 +183,7 @@ export class MemStorage implements IStorage {
   async updateFocusBlock(id: string, updates: Partial<InsertFocusBlock>): Promise<FocusBlock | undefined> {
     const focusBlock = this.focusBlocks.get(id);
     if (!focusBlock) return undefined;
-    
-    const updatedFocusBlock: FocusBlock = { 
-      ...focusBlock, 
-      ...updates 
-    };
+    const updatedFocusBlock: FocusBlock = { ...focusBlock, ...updates };
     this.focusBlocks.set(id, updatedFocusBlock);
     return updatedFocusBlock;
   }
@@ -209,7 +202,8 @@ export class MemStorage implements IStorage {
   }
 
   async createCalendarEvent(insertEvent: InsertCalendarEvent): Promise<CalendarEvent> {
-    const event: CalendarEvent = { 
+    // Map semantics make this inherently an upsert
+    const event: CalendarEvent = {
       id: insertEvent.id,
       title: insertEvent.title,
       start: insertEvent.start,
@@ -217,7 +211,7 @@ export class MemStorage implements IStorage {
       location: insertEvent.location || null,
       description: insertEvent.description || null,
       isAllDay: insertEvent.isAllDay || false,
-      lastSync: new Date() 
+      lastSync: new Date()
     };
     this.calendarEvents.set(event.id, event);
     return event;
@@ -226,12 +220,7 @@ export class MemStorage implements IStorage {
   async updateCalendarEvent(id: string, updates: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined> {
     const event = this.calendarEvents.get(id);
     if (!event) return undefined;
-    
-    const updatedEvent: CalendarEvent = { 
-      ...event, 
-      ...updates, 
-      lastSync: new Date() 
-    };
+    const updatedEvent: CalendarEvent = { ...event, ...updates, lastSync: new Date() };
     this.calendarEvents.set(id, updatedEvent);
     return updatedEvent;
   }
@@ -243,14 +232,12 @@ export class MemStorage implements IStorage {
   async clearCalendarEvents(): Promise<void> {
     this.calendarEvents.clear();
   }
-  
-  // Settings (in-memory storage doesn't persist)
-  private settings: Map<string, string> = new Map();
-  
+
+  // Settings
   async getSetting(key: string): Promise<string | undefined> {
     return this.settings.get(key);
   }
-  
+
   async setSetting(key: string, value: string): Promise<void> {
     this.settings.set(key, value);
   }
@@ -274,7 +261,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined> {
-    const [task] = await db.update(tasks)
+    const [task] = await db
+      .update(tasks)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(tasks.id, id))
       .returning();
@@ -282,12 +270,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTask(id: string): Promise<boolean> {
-    // First delete all associated focus blocks
     await db.delete(focusBlocks).where(eq(focusBlocks.taskId, id));
-    
-    // Then delete the task
-    const result = await db.delete(tasks).where(eq(tasks.id, id));
-    return (result as any).rowCount > 0;
+    const deleted = await db.delete(tasks).where(eq(tasks.id, id)).returning({ id: tasks.id });
+    return deleted.length > 0;
   }
 
   // Focus Blocks
@@ -304,11 +289,11 @@ export class DatabaseStorage implements IStorage {
       })
       .from(focusBlocks)
       .leftJoin(tasks, eq(focusBlocks.taskId, tasks.id));
-    
+
     return result.map(row => ({
       ...row,
       taskTitle: row.taskTitle || undefined
-    }));
+    }) as any);
   }
 
   async getFocusBlock(id: string): Promise<FocusBlock | undefined> {
@@ -322,7 +307,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateFocusBlock(id: string, updates: Partial<InsertFocusBlock>): Promise<FocusBlock | undefined> {
-    const [block] = await db.update(focusBlocks)
+    const [block] = await db
+      .update(focusBlocks)
       .set(updates)
       .where(eq(focusBlocks.id, id))
       .returning();
@@ -330,8 +316,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteFocusBlock(id: string): Promise<boolean> {
-    await db.delete(focusBlocks).where(eq(focusBlocks.id, id));
-    return true;
+    const deleted = await db.delete(focusBlocks).where(eq(focusBlocks.id, id)).returning({ id: focusBlocks.id });
+    return deleted.length > 0;
   }
 
   // Calendar Events
@@ -344,13 +330,31 @@ export class DatabaseStorage implements IStorage {
     return event;
   }
 
+  // IMPORTANT: UPSERT so repeated syncs don't create duplicates
   async createCalendarEvent(insertEvent: InsertCalendarEvent): Promise<CalendarEvent> {
-    const [event] = await db.insert(calendarEvents).values(insertEvent).returning();
+    const now = new Date();
+    const [event] = await db
+      .insert(calendarEvents)
+      .values({ ...insertEvent, lastSync: now })
+      .onConflictDoUpdate({
+        target: calendarEvents.id, // ensure 'id' is UNIQUE/PK in your schema
+        set: {
+          title: insertEvent.title,
+          start: insertEvent.start,
+          end: insertEvent.end,
+          location: insertEvent.location ?? null,
+          description: insertEvent.description ?? null,
+          isAllDay: insertEvent.isAllDay ?? false,
+          lastSync: now
+        }
+      })
+      .returning();
     return event;
   }
 
   async updateCalendarEvent(id: string, updates: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined> {
-    const [event] = await db.update(calendarEvents)
+    const [event] = await db
+      .update(calendarEvents)
       .set({ ...updates, lastSync: new Date() })
       .where(eq(calendarEvents.id, id))
       .returning();
@@ -358,14 +362,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCalendarEvent(id: string): Promise<boolean> {
-    await db.delete(calendarEvents).where(eq(calendarEvents.id, id));
-    return true;
+    const deleted = await db.delete(calendarEvents).where(eq(calendarEvents.id, id)).returning({ id: calendarEvents.id });
+    return deleted.length > 0;
   }
 
   async clearCalendarEvents(): Promise<void> {
     await db.delete(calendarEvents);
   }
-  
+
   // Settings
   async getSetting(key: string): Promise<string | undefined> {
     const [setting] = await db.select().from(settings).where(eq(settings.key, key));
@@ -373,7 +377,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setSetting(key: string, value: string): Promise<void> {
-    await db.insert(settings)
+    await db
+      .insert(settings)
       .values({ key, value })
       .onConflictDoUpdate({
         target: settings.key,

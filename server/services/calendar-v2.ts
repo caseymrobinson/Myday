@@ -1,6 +1,7 @@
 // Calendar sync with recurrence expansion (RRULE + EXDATE + RECURRENCE-ID + RDATE),
-// low memory (per-event, per-month processing), idempotent upserts, and in-range pruning.
-
+// low memory (per-event, per-month processing), idempotent upserts, and one-time
+// cleanup to purge legacy rows so duplicates don't stick around.
+//
 // Uses only node-ical (no ical-expander).
 
 /// <reference lib="dom" />
@@ -31,8 +32,11 @@ export class CalendarServiceV2 {
   private readonly pastMonths = 9;
   private readonly futureMonths = 3;
 
-  // Add padding around slice boundaries to avoid TZ/DST edge clipping
+  // Padding around month slices to avoid TZ/DST clipping
   private readonly PAD_HOURS = 36;
+
+  // One-time migration flag key
+  private readonly MIGRATION_FLAG = "calendar_v2_migrated";
 
   // Status snapshot (for UI/debug)
   private syncStatus = {
@@ -129,7 +133,8 @@ export class CalendarServiceV2 {
   // ---------- Utilities ----------
 
   private makeOccurrenceId(uid: string, start: Date): string {
-    return `${uid}::${start.toISOString()}`; // per-occurrence, stable
+    // Stable, per-occurrence ID
+    return `${uid}::${start.toISOString()}`;
   }
 
   private monthSlices(from: Date, to: Date): Array<{ start: Date; end: Date }> {
@@ -224,7 +229,6 @@ export class CalendarServiceV2 {
     try {
       await storage.createCalendarEvent(ev); // DB impl should UPSERT on id
     } catch {
-      // Fallback if create isn't an upsert
       await storage.updateCalendarEvent(ev.id, {
         title: ev.title,
         start: ev.start,
@@ -233,6 +237,19 @@ export class CalendarServiceV2 {
         description: ev.description ?? null,
         isAllDay: ev.isAllDay
       } as any);
+    }
+  }
+
+  private async maybeRunOneTimeCleanup(): Promise<void> {
+    // If we’ve never migrated to v2 IDs, nuke the table once to purge legacy rows.
+    try {
+      const migrated = await storage.getSetting(this.MIGRATION_FLAG);
+      if (migrated === "1") return;
+      console.info("[CalendarV2] First run on v2: clearing existing calendar rows once");
+      await storage.clearCalendarEvents();
+      await storage.setSetting(this.MIGRATION_FLAG, "1");
+    } catch (e) {
+      console.warn("[CalendarV2] Migration flag check failed:", e);
     }
   }
 
@@ -259,6 +276,8 @@ export class CalendarServiceV2 {
     this.syncStatus.error = null;
 
     try {
+      await this.maybeRunOneTimeCleanup();
+
       const now = new Date();
       const rangeStart = new Date(now);
       rangeStart.setMonth(rangeStart.getMonth() - this.pastMonths);
@@ -304,7 +323,7 @@ export class CalendarServiceV2 {
         // Keep a per-event set to avoid duplicates across padded slices
         const seenIds = new Set<string>();
 
-        // Non-recurring: will only fall into one slice naturally
+        // Non-recurring
         if (!e.rrule) {
           if (baseStart >= rangeStart && baseStart < rangeEnd) {
             const id = this.makeOccurrenceId(uid, baseStart);
@@ -333,7 +352,7 @@ export class CalendarServiceV2 {
           continue;
         }
 
-        // Recurring: use RRULE with padding, plus EXDATE/RECURRENCE-ID/RDATE
+        // Recurring: RRULE + EXDATE + RECURRENCE-ID + RDATE
         const exdates = e.exdate || {};
         const recurrences = e.recurrences || {};
         const rdates = this.collectRDates(e);
@@ -450,10 +469,11 @@ export class CalendarServiceV2 {
       // Prune stale rows inside our range that were not touched this run
       try {
         const all = await storage.getCalendarEvents();
+        const touched = touchedIds;
         for (const row of all) {
           const s = new Date(row.start);
           if (s >= rangeStart && s < rangeEnd) {
-            if (!touchedIds.has(row.id)) {
+            if (!touched.has(row.id)) {
               await storage.deleteCalendarEvent(row.id);
             }
           }
