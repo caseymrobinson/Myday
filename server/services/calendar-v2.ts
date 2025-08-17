@@ -1,19 +1,18 @@
-// Calendar sync with recurrence expansion, low memory, and idempotent writes.
+// Memory-safe calendar sync using node-ical with monthly slicing, per-occurrence IDs,
+// idempotent upserts, and prune-by-syncMarker. No ical-expander, no giant arrays.
 
-/// <reference lib="dom" />
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const ical = require("node-ical");
+import ical from "node-ical";
 import { storage } from "../storage";
 import { type InsertCalendarEvent } from "@shared/schema";
-import * as cron from "node-cron";
+import cron from "node-cron";
 
+// ---- Types ----
 interface SyncStats {
-  totalParsed: number;        // occurrences considered for write
-  eventsFound: number;        // occurrences discovered in range
-  eventsStored: number;       // successfully upserted
-  eventsSkipped: number;      // filtered or malformed
-  errors: number;             // write failures
+  totalParsed: number; // occurrences considered
+  eventsFound: number; // occurrences discovered in range
+  eventsStored: number; // successfully upserted
+  eventsSkipped: number; // filtered/excluded
+  errors: number; // write failures
   startTime: Date;
   endTime?: Date;
   errorMessages: string[];
@@ -28,17 +27,16 @@ export class CalendarServiceV2 {
   private readonly pastMonths = 9;
   private readonly futureMonths = 3;
 
-  // Status snapshot (for UI/debug)
+  // Status snapshot
   private syncStatus = {
     lastSync: null as Date | null,
     syncing: false,
     totalEvents: 0,
     storedEvents: 0,
-    error: null as string | null
+    error: null as string | null,
   };
 
   constructor() {
-    // Ensure URL is loaded before starting a cron or first sync
     void this.initializeCalendarUrl().then(() => this.startCronJob());
   }
 
@@ -71,7 +69,7 @@ export class CalendarServiceV2 {
       ...this.syncStatus,
       dbEvents: dbEvents.length,
       hasUrl: !!this.icsUrl,
-      cronRunning: !!this.cronJob
+      cronRunning: !!this.cronJob,
     };
   }
 
@@ -85,12 +83,12 @@ export class CalendarServiceV2 {
       syncing: false,
       totalEvents: 0,
       storedEvents: 0,
-      error: null
+      error: null,
     };
     console.info("[CalendarV2] Calendar removed and events cleared");
   }
 
-  // ---------- Cron management ----------
+  // ---- Cron management ----
 
   private restartCron() {
     this.stopCronJob();
@@ -109,7 +107,7 @@ export class CalendarServiceV2 {
     });
 
     console.info("[CalendarV2] Cron job started");
-    // Initial sync shortly after startup
+    // Initial sync
     setTimeout(() => void this.syncCalendar(), 1500);
   }
 
@@ -121,10 +119,10 @@ export class CalendarServiceV2 {
     }
   }
 
-  // ---------- Core sync ----------
+  // ---- Utilities ----
 
   private makeOccurrenceId(uid: string, start: Date): string {
-    // Stable, per-occurrence ID; normalize with ISO-UTC
+    // Stable, per-occurrence ID in UTC
     return `${uid}::${start.toISOString()}`;
   }
 
@@ -142,105 +140,84 @@ export class CalendarServiceV2 {
     return slices;
   }
 
-  private expandRecurringEvent(event: any, rangeStart: Date, rangeEnd: Date): InsertCalendarEvent[] {
-    try {
-      if (!event.start) return [];
+  private formatICSDateUTC(d: Date): string {
+    // YYYYMMDDTHHmmssZ
+    const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+    return (
+      d.getUTCFullYear().toString() +
+      pad(d.getUTCMonth() + 1) +
+      pad(d.getUTCDate()) +
+      "T" +
+      pad(d.getUTCHours()) +
+      pad(d.getUTCMinutes()) +
+      pad(d.getUTCSeconds()) +
+      "Z"
+    );
+  }
 
-      const eventStart = new Date(event.start);
-      const eventEnd = event.end ? new Date(event.end) : new Date(eventStart.getTime() + 60 * 60 * 1000);
-      
-      // Validate dates
-      if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
-        return [];
-      }
-
-      const baseUid = event.uid || 'unknown';
-      const isAllDay = !!(
-        event.datetype === 'date' ||
-        (eventStart.getHours() === 0 && eventStart.getMinutes() === 0 && 
-         eventEnd.getHours() === 0 && eventEnd.getMinutes() === 0)
-      );
-
-      // If no recurrence, just add single event if in range
-      if (!event.rrule) {
-        if (eventStart >= rangeStart && eventStart <= rangeEnd) {
-          return [{
-            id: this.makeOccurrenceId(baseUid, eventStart),
-            title: event.summary || "Untitled Event",
-            start: eventStart,
-            end: eventEnd,
-            location: event.location || null,
-            description: event.description || null,
-            isAllDay
-          }];
+  private findOverride<T = any>(
+    map: Record<string, any> | undefined,
+    date: Date,
+  ): T | null {
+    if (!map) return null;
+    const iso = date.toISOString();
+    if (map[iso]) return map[iso] as T;
+    const icsKey = this.formatICSDateUTC(date);
+    if (map[icsKey]) return map[icsKey] as T;
+    // Fallback: tolerant compare
+    for (const k in map) {
+      const kd =
+        k.endsWith("Z") && k.includes("T")
+          ? this.parseICSKeyUTC(k)
+          : new Date(k);
+      if (!isNaN(kd?.getTime?.() ?? NaN)) {
+        if (Math.abs(kd.getTime() - date.getTime()) < 60000) {
+          return map[k] as T;
         }
-        return [];
       }
-
-      // Simple recurring event expansion (weekly meetings only)
-      const instances: InsertCalendarEvent[] = [];
-      if (event.rrule.freq === 'WEEKLY') {
-        let currentDate = new Date(eventStart);
-        const duration = eventEnd.getTime() - eventStart.getTime();
-        let instanceCount = 0;
-        const maxInstances = 100; // Limit instances per event
-
-        while (currentDate <= rangeEnd && instanceCount < maxInstances) {
-          if (currentDate >= rangeStart) {
-            const instanceEnd = new Date(currentDate.getTime() + duration);
-            instances.push({
-              id: this.makeOccurrenceId(baseUid, currentDate),
-              title: event.summary || "Untitled Event",
-              start: new Date(currentDate),
-              end: instanceEnd,
-              location: event.location || null,
-              description: event.description || null,
-              isAllDay
-            });
-            instanceCount++;
-          }
-          // Move to next week
-          currentDate.setDate(currentDate.getDate() + 7);
-        }
-      } else if (eventStart >= rangeStart && eventStart <= rangeEnd) {
-        // For other recurrence types, just add the base event
-        instances.push({
-          id: this.makeOccurrenceId(baseUid, eventStart),
-          title: event.summary || "Untitled Event",
-          start: eventStart,
-          end: eventEnd,
-          location: event.location || null,
-          description: event.description || null,
-          isAllDay
-        });
-      }
-
-      return instances;
-    } catch (error) {
-      console.error(`[CalendarV2] Error expanding event:`, error);
-      return [];
     }
+    return null;
+  }
+
+  private parseICSKeyUTC(k: string): Date {
+    // Parse YYYYMMDDTHHmmssZ
+    const y = Number(k.slice(0, 4));
+    const m = Number(k.slice(4, 6)) - 1;
+    const d = Number(k.slice(6, 8));
+    const hh = Number(k.slice(9, 11));
+    const mm = Number(k.slice(11, 13));
+    const ss = Number(k.slice(13, 15));
+    return new Date(Date.UTC(y, m, d, hh, mm, ss));
+    // if parsing fails, Date will be invalid; callers guard with isNaN checks
+  }
+
+  private isAllDay(start: Date, end: Date, src: any): boolean {
+    if (src?.datetype === "date") return true;
+    const ms = end.getTime() - start.getTime();
+    const h0 =
+      start.getUTCHours() === 0 &&
+      start.getUTCMinutes() === 0 &&
+      end.getUTCHours() === 0 &&
+      end.getUTCMinutes() === 0;
+    return h0 && ms % 86400000 === 0;
   }
 
   private async upsertEvent(ev: InsertCalendarEvent): Promise<void> {
     try {
-      await storage.createCalendarEvent(ev); // should be an UPSERT in DB storage
-    } catch (e) {
-      // Fallback: if storage lacks UPSERT, try update
-      try {
-        await storage.updateCalendarEvent(ev.id, {
-          title: ev.title,
-          start: ev.start,
-          end: ev.end,
-          location: ev.location ?? null,
-          description: ev.description ?? null,
-          isAllDay: ev.isAllDay
-        } as any);
-      } catch (e2) {
-        throw e2;
-      }
+      await storage.createCalendarEvent(ev); // should be UPSERT in DB impl
+    } catch {
+      await storage.updateCalendarEvent(ev.id, {
+        title: ev.title,
+        start: ev.start,
+        end: ev.end,
+        location: ev.location ?? null,
+        description: ev.description ?? null,
+        isAllDay: ev.isAllDay,
+      } as any);
     }
   }
+
+  // ---- Core sync (node-ical only) ----
 
   async syncCalendar(): Promise<SyncStats> {
     const stats: SyncStats = {
@@ -250,7 +227,7 @@ export class CalendarServiceV2 {
       eventsSkipped: 0,
       errors: 0,
       startTime: new Date(),
-      errorMessages: []
+      errorMessages: [],
     };
 
     if (!this.icsUrl || this.isRunning) {
@@ -270,63 +247,198 @@ export class CalendarServiceV2 {
       rangeEnd.setMonth(rangeEnd.getMonth() + this.futureMonths);
 
       console.info(
-        `[CalendarV2] Sync window ${rangeStart.toISOString()} -> ${rangeEnd.toISOString()}`
+        `[CalendarV2] Sync window ${rangeStart.toISOString()} -> ${rangeEnd.toISOString()}`,
       );
 
-      // Download ICS once
-      const res = await fetch(this.icsUrl);
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      }
-      const ics = await res.text();
-      console.info(`[CalendarV2] Downloaded ${(ics.length / 1024 / 1024).toFixed(2)} MB of ICS`);
+      // Parse ICS directly into objects (node-ical handles fetching + parse)
+      const parsed = await ical.fromURL(this.icsUrl, {});
+      console.info(
+        `[CalendarV2] Parsed ${Object.keys(parsed).length} ICS items`,
+      );
 
-      // Parse with memory-efficient node-ical
-      const parsedCal = ical.parseICS(ics);
-      console.info(`[CalendarV2] Parsed ${Object.keys(parsedCal).length} calendar objects`);
-
-      // We track what we touched so we can prune stale rows in-range
+      // Mark rows we touch this run so we can prune stale in-range entries
       const touchedIds = new Set<string>();
 
-      // Process each calendar object
-      let processedCount = 0;
-      const maxEvents = 1000; // Conservative limit for memory
+      // Process one VEVENT at a time, slice-by-slice, then drop references
+      const slices = this.monthSlices(rangeStart, rangeEnd);
 
-      for (const [key, event] of Object.entries(parsedCal)) {
-        if (processedCount >= maxEvents) {
-          console.info(`[CalendarV2] Reached maximum event limit (${maxEvents}), stopping`);
-          break;
+      for (const key of Object.keys(parsed)) {
+        const e: any = parsed[key];
+        if (!e || e.type !== "VEVENT") {
+          // free ASAP
+          delete (parsed as any)[key];
+          continue;
         }
 
-        if (event.type !== 'VEVENT') continue;
+        // Base fields
+        const baseStart: Date = new Date(e.start);
+        const baseEnd: Date = e.end
+          ? new Date(e.end)
+          : new Date(baseStart.getTime() + 3600000);
+        if (isNaN(baseStart.getTime()) || isNaN(baseEnd.getTime())) {
+          stats.eventsSkipped++;
+          delete (parsed as any)[key];
+          continue;
+        }
+        const durationMs = baseEnd.getTime() - baseStart.getTime();
 
-        // Expand recurring events using custom logic
-        const expandedEvents = this.expandRecurringEvent(event, rangeStart, rangeEnd);
-        
-        for (const expandedEvent of expandedEvents) {
-          if (processedCount >= maxEvents) break;
-          
-          try {
-            await this.upsertEvent(expandedEvent);
-            touchedIds.add(expandedEvent.id);
-            stats.eventsStored++;
-            stats.eventsFound++;
-            stats.totalParsed++;
-            processedCount++;
-          } catch (err) {
-            stats.errors++;
-            stats.errorMessages.push(String(err));
-            console.error("[CalendarV2] Upsert failed:", expandedEvent.id, err);
+        // Expand per month slice to bound rrule results
+        for (const { start: sliceStart, end: sliceEnd } of slices) {
+          // 1) Recurring
+          if (e.rrule) {
+            // Dates within slice (inclusive). node-ical uses rrule.js under the hood.
+            const dates: Date[] = e.rrule.between(sliceStart, sliceEnd, true);
+            const exdates = e.exdate || {};
+            const recurrences = e.recurrences || {};
+
+            for (const dt of dates) {
+              // If there is an overridden instance, use it; if excluded, skip.
+              const override = this.findOverride<any>(recurrences, dt);
+              if (override) {
+                const s = new Date(override.start);
+                const en = override.end
+                  ? new Date(override.end)
+                  : new Date(s.getTime() + durationMs);
+                if (s >= sliceStart && s < sliceEnd) {
+                  const id = this.makeOccurrenceId(e.uid, s);
+                  const record: InsertCalendarEvent = {
+                    id,
+                    title: override.summary || e.summary || "Untitled Event",
+                    start: s,
+                    end: en,
+                    location: override.location ?? e.location ?? null,
+                    description: override.description ?? e.description ?? null,
+                    isAllDay: this.isAllDay(s, en, override),
+                  };
+                  try {
+                    await this.upsertEvent(record);
+                    touchedIds.add(id);
+                    stats.eventsStored++;
+                    stats.eventsFound++;
+                  } catch (err) {
+                    stats.errors++;
+                    stats.errorMessages.push(String(err));
+                    console.error(
+                      "[CalendarV2] Upsert failed (recurrence override):",
+                      id,
+                      err,
+                    );
+                  }
+                }
+                continue;
+              }
+
+              // Exdate?
+              const excluded = this.findOverride<any>(exdates, dt);
+              if (excluded) {
+                stats.eventsSkipped++;
+                continue;
+              }
+
+              // Regular occurrence derived from base
+              const s = dt;
+              const en = new Date(s.getTime() + durationMs);
+              if (s >= sliceStart && s < sliceEnd) {
+                const id = this.makeOccurrenceId(e.uid, s);
+                const record: InsertCalendarEvent = {
+                  id,
+                  title: e.summary || "Untitled Event",
+                  start: s,
+                  end: en,
+                  location: e.location ?? null,
+                  description: e.description ?? null,
+                  isAllDay: this.isAllDay(s, en, e),
+                };
+                try {
+                  await this.upsertEvent(record);
+                  touchedIds.add(id);
+                  stats.eventsStored++;
+                  stats.eventsFound++;
+                } catch (err) {
+                  stats.errors++;
+                  stats.errorMessages.push(String(err));
+                  console.error(
+                    "[CalendarV2] Upsert failed (rrule occurrence):",
+                    id,
+                    err,
+                  );
+                }
+              }
+            }
+
+            // There may be override instances not returned by rrule.between if moved far.
+            // Ensure we pick up any in-slice recurrences explicitly listed.
+            for (const k of Object.keys(e.recurrences || {})) {
+              const r = e.recurrences[k];
+              const s = new Date(r.start);
+              const en = r.end
+                ? new Date(r.end)
+                : new Date(s.getTime() + durationMs);
+              if (s >= sliceStart && s < sliceEnd) {
+                const id = this.makeOccurrenceId(e.uid, s);
+                if (!touchedIds.has(id)) {
+                  const record: InsertCalendarEvent = {
+                    id,
+                    title: r.summary || e.summary || "Untitled Event",
+                    start: s,
+                    end: en,
+                    location: r.location ?? e.location ?? null,
+                    description: r.description ?? e.description ?? null,
+                    isAllDay: this.isAllDay(s, en, r),
+                  };
+                  try {
+                    await this.upsertEvent(record);
+                    touchedIds.add(id);
+                    stats.eventsStored++;
+                    stats.eventsFound++;
+                  } catch (err) {
+                    stats.errors++;
+                    stats.errorMessages.push(String(err));
+                    console.error(
+                      "[CalendarV2] Upsert failed (loose override):",
+                      id,
+                      err,
+                    );
+                  }
+                }
+              }
+            }
+          } else {
+            // 2) Non-recurring: write once if in slice
+            if (baseStart >= sliceStart && baseStart < sliceEnd) {
+              const id = this.makeOccurrenceId(e.uid || key, baseStart);
+              const record: InsertCalendarEvent = {
+                id,
+                title: e.summary || "Untitled Event",
+                start: baseStart,
+                end: baseEnd,
+                location: e.location ?? null,
+                description: e.description ?? null,
+                isAllDay: this.isAllDay(baseStart, baseEnd, e),
+              };
+              try {
+                await this.upsertEvent(record);
+                touchedIds.add(id);
+                stats.eventsStored++;
+                stats.eventsFound++;
+              } catch (err) {
+                stats.errors++;
+                stats.errorMessages.push(String(err));
+                console.error("[CalendarV2] Upsert failed (single):", id, err);
+              }
+            } else {
+              stats.eventsSkipped++;
+            }
           }
-        }
+        } // end slice loop
 
-        // Memory management
-        if (processedCount % 50 === 0 && global.gc) {
-          global.gc();
-        }
-      }
+        // Drop this event from memory ASAP
+        delete (parsed as any)[key];
+        // @ts-ignore
+        if (global.gc) global.gc();
+      } // end all events
 
-      // Prune stale rows that are inside our range but were not touched this run
+      // Prune stale rows in-range that we did not touch this run
       try {
         const all = await storage.getCalendarEvents();
         for (const row of all) {
@@ -338,7 +450,6 @@ export class CalendarServiceV2 {
           }
         }
       } catch (pruneErr) {
-        // Non-fatal; log and continue
         console.warn("[CalendarV2] Prune failed:", pruneErr);
       }
 
@@ -347,7 +458,7 @@ export class CalendarServiceV2 {
       this.syncStatus.storedEvents = stats.eventsStored;
 
       console.info(
-        `[CalendarV2] Sync done. Stored ${stats.eventsStored}/${stats.eventsFound}. Errors: ${stats.errors}`
+        `[CalendarV2] Sync done. Stored ${stats.eventsStored}/${stats.eventsFound}. Errors: ${stats.errors}`,
       );
     } catch (error) {
       stats.errors++;
@@ -365,23 +476,23 @@ export class CalendarServiceV2 {
     return stats;
   }
 
-  // ---------- Query helpers for the UI ----------
+  // ---- Query helpers ----
 
   async getEventsForDate(date: string): Promise<any[]> {
     const events = await storage.getCalendarEvents();
     const target = new Date(date).toDateString();
 
     return events
-      .filter(e => new Date(e.start).toDateString() === target)
+      .filter((e) => new Date(e.start).toDateString() === target)
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
-      .map(e => ({
+      .map((e) => ({
         id: e.id,
         title: e.title,
         start: new Date(e.start).toISOString(),
         end: new Date(e.end).toISOString(),
         location: e.location,
         description: e.description,
-        isAllDay: e.isAllDay
+        isAllDay: e.isAllDay,
       }));
   }
 
@@ -389,19 +500,19 @@ export class CalendarServiceV2 {
     const events = await storage.getCalendarEvents();
 
     return events
-      .filter(e => {
+      .filter((e) => {
         const s = new Date(e.start);
         return s >= startDate && s <= endDate;
       })
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
-      .map(e => ({
+      .map((e) => ({
         id: e.id,
         title: e.title,
         start: new Date(e.start).toISOString(),
         end: new Date(e.end).toISOString(),
         location: e.location,
         description: e.description,
-        isAllDay: e.isAllDay
+        isAllDay: e.isAllDay,
       }));
   }
 }
