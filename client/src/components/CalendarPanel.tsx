@@ -258,7 +258,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
               <span className="text-gray-400">Confirmed tasks</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+              <span className="w-2 h-2 rounded-full bg-[#5E00E1]"></span>
               <span className="text-gray-400">AI suggested tasks</span>
             </div>
           </div>
@@ -317,7 +317,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                   className={`
                     ${event.color === 'blue' ? 'bg-blue-500/20 border-blue-500 text-blue-400' : ''}
                     ${event.color === 'green' ? 'bg-green-500/20 border-green-500 text-green-400' : ''}
-                    ${event.color === 'purple' ? 'bg-purple-500/20 border-purple-500 text-purple-400' : ''}
+                    ${event.color === 'purple' ? 'bg-[#5E00E1]/20 border-[#5E00E1] text-[#8C4CFF]' : ''}
                     border-l-2 rounded px-2 py-1 h-full flex items-start
                   `}
                 >
@@ -348,7 +348,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                     type="submit"
                     size="icon"
                     disabled={!chatInput.trim() || sendMessageMutation.isPending}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 bg-purple-500 hover:bg-purple-600 text-white rounded h-7 w-7"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 bg-[#5E00E1] hover:bg-[#4A00B5] text-white rounded h-7 w-7"
                   >
                     <Send className="h-3 w-3" />
                   </Button>
@@ -403,7 +403,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                   size="icon"
                   variant="ghost"
                   onClick={onOpenChat}
-                  className="h-10 w-10 rounded-full bg-purple-500 hover:bg-purple-600 text-white"
+                  className="h-10 w-10 rounded-full bg-[#5E00E1] hover:bg-[#4A00B5] text-white"
                   data-testid="button-open-chat-panel"
                 >
                   <Bot className="h-5 w-5" />

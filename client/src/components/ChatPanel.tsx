@@ -97,7 +97,7 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5E00E1] to-[#4A00B5] flex items-center justify-center">
             <Bot className="h-5 w-5 text-white" />
           </div>
           <div>
@@ -128,13 +128,13 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
               <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                   msg.isUser
-                    ? 'bg-purple-500 text-white'
+                    ? 'bg-[#5E00E1] text-white'
                     : 'bg-gray-900 text-gray-200 border border-gray-800'
                 }`}
               >
                 <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
                 <span className={`text-xs mt-1 block ${
-                  msg.isUser ? 'text-purple-200' : 'text-gray-500'
+                  msg.isUser ? 'text-[#B580FF]' : 'text-gray-500'
                 }`}>
                   {formatTime(msg.timestamp)}
                 </span>
@@ -145,9 +145,9 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
             <div className="flex justify-start">
               <div className="bg-gray-900 border border-gray-800 rounded-2xl px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce delay-100"></div>
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce delay-200"></div>
+                  <div className="w-2 h-2 bg-[#5E00E1] rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-[#5E00E1] rounded-full animate-bounce delay-100"></div>
+                  <div className="w-2 h-2 bg-[#5E00E1] rounded-full animate-bounce delay-200"></div>
                 </div>
               </div>
             </div>
@@ -189,7 +189,7 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
             type="submit"
             size="icon"
             disabled={!inputMessage.trim() || sendMessageMutation.isPending}
-            className="absolute right-2 top-1/2 -translate-y-1/2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg h-8 w-8"
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-[#5E00E1] hover:bg-[#4A00B5] text-white rounded-lg h-8 w-8"
             data-testid="button-send-message"
           >
             {sendMessageMutation.isPending ? (
