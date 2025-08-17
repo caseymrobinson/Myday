@@ -521,7 +521,7 @@ export class CalendarServiceV2 {
         end: new Date(e.end).toISOString(),
         location: e.location,
         description: e.description,
-        isAllDay: e.isAllDay
+        isAllDay: e.isAllDay ?? (e as any).is_all_day ?? false
       }));
   }
 
