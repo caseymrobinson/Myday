@@ -223,12 +223,13 @@ export class CalendarServiceV2 {
       console.log(`[CalendarV2] Found ${Object.keys(parsedCal).length} calendar items`);
       
       const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1); // Current month only
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 2, 0); // Next month only
+      // Expand range: 2 months back and 6 months forward to catch recurring events
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 7, 0);
       
       const calendarEvents: InsertCalendarEvent[] = [];
       let processedCount = 0;
-      const maxEvents = 200; // Much smaller limit
+      const maxEvents = 500; // Increased limit for better coverage
       
       // Process events one by one to avoid memory buildup
       for (const [key, event] of Object.entries(parsedCal)) {
@@ -240,8 +241,17 @@ export class CalendarServiceV2 {
         const parsedEvent = this.parseICalEvent(key, event);
         if (!parsedEvent) continue;
         
-        // Only include events within our focused time range
-        if (parsedEvent.start >= startDate && parsedEvent.start <= endDate) {
+        // Include events within our time range OR recurring events that might have instances in range
+        const isInTimeRange = parsedEvent.start >= startDate && parsedEvent.start <= endDate;
+        
+        // Check for recurring events - handle both VEVENT and other types
+        let hasRecurringRule = false;
+        if (event.type === 'VEVENT') {
+          hasRecurringRule = !!(event as any).rrule || !!(event as any).recurrences;
+        }
+        const isRecurringEvent = hasRecurringRule && parsedEvent.start >= new Date('2020-01-01');
+        
+        if (isInTimeRange || isRecurringEvent) {
           calendarEvents.push({
             id: parsedEvent.uid,
             title: parsedEvent.title,
@@ -262,6 +272,8 @@ export class CalendarServiceV2 {
       
       stats.eventsFound = calendarEvents.length;
       console.log(`[CalendarV2] Processed ${stats.eventsFound} events from calendar`);
+      console.log(`[CalendarV2] Date range: ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
+      console.log(`[CalendarV2] Total processed: ${processedCount} events checked`);
       
       // Calculate hash for change detection
       const currentHash = crypto.createHash('md5')
