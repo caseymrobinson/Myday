@@ -1,16 +1,24 @@
+// server/services/openai.ts
+// -----------------------------------------------------------------------------
+// IMPORTANT: This file targets the GPT-5 "Responses API".
+// - Use: openai.responses.create(...)
+// - Model: "gpt-5" (or another GPT-5-* variant that supports Responses API)
+// - JSON output control: text.format = { type: "json_schema", name, schema, strict }
+// DO NOT switch to Chat Completions (chat.completions.create) or change the
+// model to non-GPT-5 without rewriting parameters accordingly.
+// -----------------------------------------------------------------------------
+
 import OpenAI from "openai";
 import { calendarService } from "./calendar";
 import { schedulerService } from "./scheduler";
 import { storage } from "../storage";
 
-// ---------- Config ----------
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini"; // your preference
+// ---------- GPT-5 Responses API config ----------
+const MODEL = process.env.OPENAI_MODEL || "gpt-5";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 
 // ---------- Time helpers (local, with offset) ----------
-function pad(n: number) {
-  return n < 10 ? `0${n}` : `${n}`;
-}
+function pad(n: number) { return n < 10 ? `0${n}` : `${n}`; }
 function offsetStr(d: Date) {
   const offMin = -d.getTimezoneOffset(); // minutes east of UTC
   const sign = offMin >= 0 ? "+" : "-";
@@ -21,9 +29,8 @@ function offsetStr(d: Date) {
 }
 function toLocalISO(d: Date) {
   // yyyy-mm-ddThh:mm:ss±hh:mm using local wall time + local offset
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
-    d.getMinutes()
-  )}:${pad(d.getSeconds())}${offsetStr(d)}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+       + `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${offsetStr(d)}`;
 }
 function localDayStart(dateStr: string, h = 0, m = 0) {
   const [y, mo, d] = dateStr.split("-").map(Number);
@@ -54,61 +61,120 @@ function clampToWorkday(date: Date, dateStr: string) {
 function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
   return aStart < bEnd && bStart < aEnd;
 }
-
-// Normalize an ISO-ish thing into a Date safely
 function toDateSafe(v: any) {
-  try {
-    return new Date(v);
-  } catch {
-    return new Date(NaN);
-  }
+  try { return new Date(v); } catch { return new Date(NaN); }
 }
-
-// Extract safest JSON from LLM output
 function parseJsonLoose(s: string | null | undefined): any {
   if (!s) return {};
-  // Try direct parse
-  try {
-    return JSON.parse(s);
-  } catch {}
-  // Try to find the biggest {...} block
+  try { return JSON.parse(s); } catch {}
   const start = s.indexOf("{");
   const end = s.lastIndexOf("}");
   if (start >= 0 && end > start) {
-    const candidate = s.slice(start, end + 1);
-    try {
-      return JSON.parse(candidate);
-    } catch {}
+    try { return JSON.parse(s.slice(start, end + 1)); } catch {}
   }
-  // Try fenced code
   const m = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (m) {
-    try {
-      return JSON.parse(m[1]);
-    } catch {}
-  }
+  if (m) { try { return JSON.parse(m[1]); } catch {} }
   return {};
 }
+function outputText(resp: any): string {
+  // Prefer the SDK helper if present
+  if (typeof resp?.output_text === "string" && resp.output_text.length) return resp.output_text;
+  // Fallback: walk output array
+  const out = resp?.output;
+  if (Array.isArray(out)) {
+    for (const item of out) {
+      const content = item?.content;
+      if (Array.isArray(content)) {
+        for (const c of content) {
+          if (typeof c?.text === "string" && c.text) return c.text;
+        }
+      }
+    }
+  }
+  return "";
+}
+
+// ---------- JSON Schemas (for text.format) ----------
+const DayPlanSchemaObject = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    scheduledTasks: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          taskId: { type: "string" },
+          taskTitle: { type: "string" },
+          start: { type: "string" }, // local ISO without 'Z' preferred
+          end: { type: "string" },   // local ISO without 'Z' preferred
+          estimatedMinutes: { type: "number" },
+          reasoning: { type: "string" }
+        },
+        required: ["taskId", "taskTitle", "start", "end"]
+      }
+    },
+    unscheduledTasks: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          taskId: { type: "string" },
+          taskTitle: { type: "string" },
+          reason: { type: "string" }
+        },
+        required: ["taskId", "taskTitle", "reason"]
+      }
+    },
+    recommendations: { type: "array", items: { type: "string" } }
+  },
+  required: ["scheduledTasks", "unscheduledTasks", "recommendations"]
+} as const;
+
+const ExtractTasksSchemaObject = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    tasks: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          title: { type: "string" },
+          priority: { type: "number" },      // 1|2|3
+          estimateMins: { type: "number" },
+          context: { type: "string" },
+          dueAt: { type: ["string", "null"] } // ISO or null
+        },
+        required: ["title"]
+      }
+    },
+    summary: { type: "string" }
+  },
+  required: ["tasks", "summary"]
+} as const;
 
 export class OpenAIService {
+  // ---------- Day planning with GPT-5 (Responses API + JSON schema) ----------
   async planDay(date: string): Promise<any> {
     if (!process.env.OPENAI_API_KEY) {
       return { error: "OpenAI API key not configured" };
     }
 
     try {
-      // Figure out tomorrow as local date string, not UTC slicing
+      // Compute tomorrow as local date string (avoid UTC slicing)
       const [y, mo, d] = date.split("-").map(Number);
       const base = new Date();
       base.setFullYear(y, mo - 1, d);
       base.setHours(12, 0, 0, 0); // midday avoids DST edges
       const tomorrowDt = new Date(base.getTime());
       tomorrowDt.setDate(base.getDate() + 1);
-      const tomorrow = `${tomorrowDt.getFullYear()}-${pad(tomorrowDt.getMonth() + 1)}-${pad(
-        tomorrowDt.getDate()
-      )}`;
+      const tomorrow = `${tomorrowDt.getFullYear()}-${pad(tomorrowDt.getMonth() + 1)}-${pad(tomorrowDt.getDate())}`;
 
-      // Pull data
+      // Pull data concurrently
       const [meetingsToday, freeBlocksToday, meetingsTomorrow, freeBlocksTomorrow, tasks] = await Promise.all([
         calendarService.getEventsForDate(date),
         schedulerService.getFreeTimeSlots(date),
@@ -119,7 +185,6 @@ export class OpenAIService {
 
       const pendingTasks = tasks.filter((t: any) => t.status === "pending");
 
-      // Convert everything to local-ISO strings with offset so the model can’t get confused
       const mapMeetings = (arr: any[]) =>
         arr.map((m: any) => ({
           id: m.id,
@@ -134,78 +199,67 @@ export class OpenAIService {
           start: toLocalISO(toDateSafe(b.start)),
           end: toLocalISO(toDateSafe(b.end))
         }));
-      const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      // Day boundaries given as explicit anchors with offset
       const workStartToday = toLocalISO(localDayStart(date, 9, 0));
       const workEndToday = toLocalISO(localDayStart(date, 17, 0));
       const workStartTomorrow = toLocalISO(localDayStart(tomorrow, 9, 0));
       const workEndTomorrow = toLocalISO(localDayStart(tomorrow, 17, 0));
 
-      // Build simplified prompt to avoid token limits
-      const prompt = `Schedule pending tasks for ${date}. Work hours: 9 AM - 5 PM local time.
+      const prompt =
+`Schedule pending tasks for ${date}. Business hours: 9:00–17:00 LOCAL.
+
+Rules:
+- Use only 15-minute intervals (:00, :15, :30, :45)
+- Do not schedule outside ${workStartToday} .. ${workEndToday}
+- Avoid overlapping meetings
+- Prioritize higher priority and sooner due dates
+- Prefer local ISO without 'Z' (e.g. "${date}T09:00:00.000${offsetStr(new Date())}")
+
+TODAY MEETINGS:
+${mapMeetings(meetingsToday).map(m => `- ${m.title}: ${m.start} → ${m.end}`).join('\n') || "- none"}
+
+TODAY FREE BLOCKS:
+${mapBlocks(freeBlocksToday).map(b => `- ${b.start} → ${b.end}`).join('\n') || "- none"}
+
+TOMORROW MEETINGS:
+${mapMeetings(meetingsTomorrow).map(m => `- ${m.title}: ${m.start} → ${m.end}`).join('\n') || "- none"}
+
+TOMORROW FREE BLOCKS:
+${mapBlocks(freeBlocksTomorrow).map(b => `- ${b.start} → ${b.end}`).join('\n') || "- none"}
 
 PENDING TASKS:
-${pendingTasks.slice(0, 5).map((t: any) => 
-  `- ID: ${t.id}, Title: "${t.title}", Priority: ${t.priority ?? 2}, Duration: ${t.estimateMins ?? 30}min${t.dueAt ? `, Due: ${new Date(t.dueAt).toLocaleDateString()}` : ''}`
-).join('\n') || '- None'}
+${pendingTasks.map((t: any) => `- ${t.id} :: "${t.title}" :: priority ${t.priority ?? 2} :: est ${t.estimateMins ?? 30}m${t.dueAt ? ` :: due ${toLocalISO(new Date(t.dueAt))}` : ''}`).join('\n') || "- none"}
 
-TODAY'S MEETINGS:
-${mapMeetings(meetingsToday).slice(0, 5).map(m => 
-  `- ${m.title}: ${new Date(m.start).toLocaleTimeString()} - ${new Date(m.end).toLocaleTimeString()}`
-).join('\n') || '- None'}
+Return STRICT JSON that matches the provided schema (no commentary).`;
 
-RULES:
-- Schedule between 9:00 AM - 5:00 PM only
-- Use 15-minute intervals (:00, :15, :30, :45)  
-- Avoid meeting conflicts
-- Format times as ${date}T09:00:00.000 (NO Z suffix)
-- Prioritize high-priority tasks and due dates
-
-Return JSON:
-{
-  "scheduledTasks": [
-    {"taskId": "...", "taskTitle": "...", "start": "${date}T09:00:00.000", "end": "${date}T09:30:00.000", "estimatedMinutes": 30, "reasoning": "..."}
-  ],
-  "unscheduledTasks": [
-    {"taskId": "...", "taskTitle": "...", "reason": "..."}
-  ],
-  "recommendations": ["..."]
-}`;
-
-      // Fire the request
-      const resp = await openai.chat.completions.create({
+      // GPT-5 Responses API call with JSON schema (NOTE: name must be at text.format level)
+      const resp = await openai.responses.create({
         model: MODEL,
-        messages: [
-          { role: "system", content: "You are an expert day planner AI. Obsess over timezones, constraints, and JSON validity." },
-          { role: "user", content: prompt }
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: "You are an expert day planner AI. Obsess over timezones, constraints, and JSON validity." }]
+          },
+          { role: "user", content: [{ type: "input_text", text: prompt }] }
         ],
-        response_format: { type: "json_object" },
+        text: {
+          format: {
+            type: "json_schema",
+            name: "DayPlan",
+            schema: DayPlanSchemaObject,
+            strict: true
+          }
+        },
         temperature: 0.2,
-        max_tokens: 800
+        max_output_tokens: 1500
       });
 
-      const raw = resp.choices?.[0]?.message?.content ?? "";
-      
-      // === COMPREHENSIVE DEBUG LOGGING ===
-      console.log('=== OPENAI FULL RESPONSE DEBUG ===');
-      console.log('Full OpenAI Response Object:', JSON.stringify(resp, null, 2));
-      console.log('Raw Content from OpenAI:', raw);
-      console.log('Raw Content Length:', raw.length);
-      console.log('Raw Content Type:', typeof raw);
-      console.log('=== PARSING ATTEMPT ===');
-      
+      const raw = outputText(resp);
       const schedule = parseJsonLoose(raw);
-      
-      console.log('Parsed Schedule Object:', JSON.stringify(schedule, null, 2));
-      console.log('Schedule Keys:', Object.keys(schedule));
-      console.log('Scheduled Tasks Array:', schedule.scheduledTasks);
-      console.log('=== END OPENAI DEBUG ===');
 
-      // Post-validate the plan: local times, business hours, quarters, no weekend, no overlap with meetings
+      // Validate/normalize plan locally
       const meetingsAll = [...mapMeetings(meetingsToday), ...mapMeetings(meetingsTomorrow)].map(m => ({
-        start: toDateSafe(m.start),
-        end: toDateSafe(m.end)
+        start: toDateSafe(m.start), end: toDateSafe(m.end)
       }));
 
       const scheduled: any[] = Array.isArray(schedule.scheduledTasks) ? schedule.scheduledTasks : [];
@@ -220,15 +274,11 @@ Return JSON:
             unscheduled.push({ taskId: s.taskId, taskTitle: s.taskTitle, reason: "Invalid timestamps" });
             continue;
           }
-
-          // Determine which local date it’s scheduled on (use start)
           const dStr = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
           if (isWeekendLocal(dStr)) {
-            unscheduled.push({ taskId: s.taskId, taskTitle: s.taskTitle, reason: "Scheduled on weekend" });
+            unscheduled.push({ taskId: s.taskId, taskTitle: s.taskTitle, reason: "Weekend" });
             continue;
           }
-
-          // Clamp to workday, round to quarter
           let sAdj = roundToQuarter(start);
           let eAdj = roundToQuarter(end);
           sAdj = clampToWorkday(sAdj, dStr);
@@ -237,20 +287,14 @@ Return JSON:
             unscheduled.push({ taskId: s.taskId, taskTitle: s.taskTitle, reason: "Outside business hours" });
             continue;
           }
-
-          // Check overlap with meetings
           let conflict = false;
           for (const m of meetingsAll) {
-            if (overlaps(sAdj, eAdj, m.start, m.end)) {
-              conflict = true;
-              break;
-            }
+            if (overlaps(sAdj, eAdj, m.start, m.end)) { conflict = true; break; }
           }
           if (conflict) {
             unscheduled.push({ taskId: s.taskId, taskTitle: s.taskTitle, reason: "Overlaps a meeting" });
             continue;
           }
-
           validScheduled.push({
             taskId: s.taskId,
             taskTitle: s.taskTitle,
@@ -264,55 +308,51 @@ Return JSON:
         }
       }
 
-      // Finish result
       return {
         suggestions: validScheduled.map(s => ({ ...s, confidence: 0.85 })),
         unscheduledTasks: unscheduled,
         recommendations: Array.isArray(schedule.recommendations) ? schedule.recommendations : []
       };
     } catch (error: any) {
-      // Be verbose in logs, polite in return
       console.error("Error planning day:", error?.response?.data || error);
       return { error: "Failed to generate day plan", details: String(error?.message || error) };
     }
   }
 
+  // ---------- Generic chat / fallback assistant (Responses API, plain text) ----------
   async processMessage(message: string, conversationHistory: any[] = []): Promise<string> {
     if (!process.env.OPENAI_API_KEY) {
       return "OpenAI API key not configured. Please set OPENAI_API_KEY.";
     }
 
     try {
-      if (this.isScheduleQuery(message)) {
-        return await this.generateAgendaSummary();
-      }
-
+      if (this.isScheduleQuery(message)) return await this.generateAgendaSummary();
       if (this.isTaskCreationRequest(message) || this.hasActionItems(message)) {
         const result = await this.extractTasksFromText(message);
         return result.summary;
       }
 
-      const messages = [
+      const input = [
         {
           role: "system" as const,
-          content:
-            "You are a helpful AI assistant for a daily planning application called 'My Day'. Be concise and actionable."
+          content: [{ type: "input_text", text: "You are a helpful AI assistant for a daily planning app called 'My Day'. Be concise and actionable." }]
         },
-        ...conversationHistory.slice(-6),
-        { role: "user" as const, content: message }
+        ...conversationHistory.slice(-6).map((m: any) => ({
+          role: m.role, content: [{ type: "input_text", text: String(m.content ?? "") }]
+        })),
+        { role: "user" as const, content: [{ type: "input_text", text: message }] }
       ];
 
-      const response = await openai.chat.completions.create({
+      const resp = await openai.responses.create({
         model: MODEL,
-        messages,
-        temperature: 1,
-        max_completion_tokens: 1000
+        input,
+        max_output_tokens: 1000,
+        temperature: 1
       });
 
-      return response.choices?.[0]?.message?.content || "I couldn't process your request.";
+      return outputText(resp) || "I couldn't process your request.";
     } catch (error: any) {
       console.error("OpenAI API error:", error?.response?.data || error);
-
       if (error?.code === "invalid_api_key" || error?.status === 401) {
         return "OpenAI API key is invalid or missing. Please check your API key configuration.";
       }
@@ -323,92 +363,17 @@ Return JSON:
     }
   }
 
-  private isScheduleQuery(message: string): boolean {
-    const scheduleKeywords = [
-      "what am i doing today",
-      "today's schedule",
-      "my day",
-      "agenda",
-      "schedule",
-      "meetings today",
-      "what's next"
-    ];
-    const lower = message.toLowerCase();
-    return scheduleKeywords.some((k) => lower.includes(k));
-  }
-
-  private isTaskCreationRequest(message: string): boolean {
-    const taskKeywords = [
-      "create task",
-      "add task",
-      "new task",
-      "i need to",
-      "remind me to",
-      "todo",
-      "to do",
-      "task:",
-      "action item",
-      "follow up",
-      "schedule to"
-    ];
-    const lower = message.toLowerCase();
-    return taskKeywords.some((k) => lower.includes(k));
-  }
-
-  private hasActionItems(message: string): boolean {
-    const patterns = [
-      /^(i need to|i have to|i should|i must|need to|have to|should|must)\s+/im,
-      /please\s+(review|complete|follow up|respond|prepare|send|schedule|call|email)/i,
-      /action items?:|next steps?:|to.?do:/i,
-      /^\s*[\d\-\*\•]\s+/m,
-      /(due|deadline|by|before)\s+(today|tomorrow|this week|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i
-    ];
-    return patterns.some((p) => p.test(message)) || (message.split("\n").length > 1 && /^\s*[\d\-\*\•]/.test(message));
-  }
-
+  // ---------- Agenda summary (Responses API, plain text) ----------
   private async generateAgendaSummary(): Promise<string> {
     try {
       const today = new Date();
       const dateStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 
-      console.log('=== AGENDA SUMMARY DEBUG ===');
-      console.log('Date string:', dateStr);
-
-      // Call each service individually with error handling
-      let meetings: any[] = [];
-      let freeBlocks: any[] = [];
-      let allTasks: any[] = [];
-      let suggestions: any[] = [];
-
-      try {
-        meetings = await calendarService.getEventsForDate(dateStr);
-        console.log('Meetings loaded successfully:', meetings.length);
-      } catch (error) {
-        console.error('Error loading meetings:', error);
-      }
-
-      try {
-        freeBlocks = await schedulerService.getFreeTimeSlots(dateStr);
-        console.log('Free blocks loaded successfully:', freeBlocks.length);
-      } catch (error) {
-        console.error('Error loading free blocks:', error);
-      }
-
-      try {
-        allTasks = await storage.getTasks();
-        console.log('Tasks loaded successfully:', allTasks.length);
-      } catch (error) {
-        console.error('Error loading tasks:', error);
-      }
-
-      try {
-        suggestions = await schedulerService.generateScheduleSuggestions(dateStr);
-        console.log('Suggestions loaded successfully:', suggestions.length);
-      } catch (error) {
-        console.error('Error loading suggestions:', error);
-      }
-
-      console.log('=== END AGENDA DEBUG ===');
+      let meetings: any[] = [], freeBlocks: any[] = [], allTasks: any[] = [], suggestions: any[] = [];
+      try { meetings = await calendarService.getEventsForDate(dateStr); } catch (e) { console.error("meetings err", e); }
+      try { freeBlocks = await schedulerService.getFreeTimeSlots(dateStr); } catch (e) { console.error("free err", e); }
+      try { allTasks = await storage.getTasks(); } catch (e) { console.error("tasks err", e); }
+      try { suggestions = await schedulerService.generateScheduleSuggestions(dateStr); } catch (e) { console.error("sugg err", e); }
 
       const topTasks = allTasks
         .filter((t: any) => t.status === "pending")
@@ -416,17 +381,14 @@ Return JSON:
         .slice(0, 5);
 
       const summaryData = {
+        date: dateStr,
         meetings: meetings.map((m: any) => ({
           title: m.title,
-          time: `${new Date(m.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(
-            m.end
-          ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+          time: `${new Date(m.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(m.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
           location: m.location
         })),
         freeBlocks: freeBlocks.map((b: any) => ({
-          time: `${new Date(b.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(
-            b.end
-          ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+          time: `${new Date(b.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(b.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
         })),
         topTasks: topTasks.map((t: any) => ({
           title: t.title,
@@ -435,28 +397,21 @@ Return JSON:
         })),
         suggestions: (suggestions || []).slice(0, 3).map((s: any) => ({
           task: s.taskTitle,
-          time: `${new Date(s.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(
-            s.end
-          ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+          time: `${new Date(s.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(s.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
         }))
       };
 
-      const response = await openai.chat.completions.create({
+      const resp = await openai.responses.create({
         model: MODEL,
-        messages: [
-          { role: "system", content: "You are a helpful daily planning assistant. Provide clear, well-organized summaries." },
-          {
-            role: "user",
-            content:
-              "Based on this schedule data, provide a concise, conversational summary for today's agenda:\n\n" +
-              JSON.stringify(summaryData, null, 2)
-          }
+        input: [
+          { role: "system", content: [{ type: "input_text", text: "You are a helpful daily planning assistant. Provide clear, well-organized summaries." }] },
+          { role: "user", content: [{ type: "input_text", text: "Based on this schedule data, provide a concise, conversational summary for today's agenda:\n\n" + JSON.stringify(summaryData, null, 2) }] }
         ],
-        temperature: 1,
-        max_completion_tokens: 800
+        max_output_tokens: 800,
+        temperature: 1
       });
 
-      return response.choices?.[0]?.message?.content || "I couldn't generate your agenda summary.";
+      return outputText(resp) || "I couldn't generate your agenda summary.";
     } catch (error: any) {
       console.error("Error generating agenda summary:", error?.response?.data || error);
       if (error?.code === "invalid_api_key" || error?.status === 401) {
@@ -466,32 +421,39 @@ Return JSON:
     }
   }
 
+  // ---------- Task extraction (Responses API + JSON schema) ----------
   private async extractTaskFromText(_: string): Promise<string> {
     return "Please use the new task extraction feature. Paste your text and I’ll pull out action items.";
   }
 
   async extractTasksFromText(textContent: string): Promise<{ tasks: any[]; summary: string }> {
     try {
-      const response = await openai.chat.completions.create({
+      const resp = await openai.responses.create({
         model: MODEL,
-        messages: [
+        input: [
           {
             role: "system",
-            content:
-              `You are a task extraction expert. Return STRICT JSON with keys {"tasks":[...],"summary":"..."}.\n` +
-              `Each task: { "title": string, "priority": 1|2|3, "estimateMins": number, "context": string, "dueAt": ISO|null }`
+            content: [{ type: "input_text", text: "You are a task extraction expert. Return STRICT JSON matching the schema. Extract ALL actionable tasks from the text." }]
           },
-          { role: "user", content: `Extract all tasks and action items from this text:\n\n${textContent}` }
+          { role: "user", content: [{ type: "input_text", text: `Extract all tasks and action items from this text:\n\n${textContent}` }] }
         ],
-        response_format: { type: "json_object" },
-        temperature: 1,
-        max_tokens: 1000
+        text: {
+          format: {
+            type: "json_schema",
+            name: "TaskExtraction",
+            schema: ExtractTasksSchemaObject,
+            strict: true
+          }
+        },
+        temperature: 0.3,
+        max_output_tokens: 1000
       });
 
-      const result = parseJsonLoose(response.choices?.[0]?.message?.content);
+      const result = parseJsonLoose(outputText(resp));
       if (!result?.tasks || !Array.isArray(result.tasks) || result.tasks.length === 0) {
         return { tasks: [], summary: "No actionable tasks found in the provided text." };
-        }
+      }
+
       const createdTasks = [];
       for (const task of result.tasks) {
         const createdTask = await storage.createTask({
@@ -511,9 +473,7 @@ Return JSON:
       const taskSummary = createdTasks
         .map(
           (t: any) =>
-            `• ${t.title} (${t.priority === 3 ? "High" : t.priority === 2 ? "Medium" : "Low"} priority${
-              t.dueAt ? `, due ${new Date(t.dueAt).toLocaleDateString()}` : ""
-            })`
+            `• ${t.title} (${t.priority === 3 ? "High" : t.priority === 2 ? "Medium" : "Low"} priority${t.dueAt ? `, due ${new Date(t.dueAt).toLocaleDateString()}` : ""})`
         )
         .join("\n");
 
@@ -528,6 +488,28 @@ Return JSON:
         summary: "I couldn't extract tasks from that text. Please try again or check if the text contains action items."
       };
     }
+  }
+
+  // ---------- Simple intent helpers ----------
+  private isScheduleQuery(message: string): boolean {
+    const keywords = ["what am i doing today","today's schedule","my day","agenda","schedule","meetings today","what's next"];
+    const lower = message.toLowerCase();
+    return keywords.some(k => lower.includes(k));
+  }
+  private isTaskCreationRequest(message: string): boolean {
+    const keywords = ["create task","add task","new task","i need to","remind me to","todo","to do","task:","action item","follow up","schedule to"];
+    const lower = message.toLowerCase();
+    return keywords.some(k => lower.includes(k));
+  }
+  private hasActionItems(message: string): boolean {
+    const patterns = [
+      /^(i need to|i have to|i should|i must|need to|have to|should|must)\s+/im,
+      /please\s+(review|complete|follow up|respond|prepare|send|schedule|call|email)/i,
+      /action items?:|next steps?:|to.?do:/i,
+      /^\s*[\d\-\*\•]\s+/m,
+      /(due|deadline|by|before)\s+(today|tomorrow|this week|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i
+    ];
+    return patterns.some(p => p.test(message)) || (message.split("\n").length > 1 && /^\s*[\d\-\*\•]/.test(message));
   }
 }
 
