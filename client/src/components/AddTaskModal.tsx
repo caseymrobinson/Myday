@@ -86,16 +86,26 @@ export default function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) 
           </div>
           
           <div>
-            <Label htmlFor="estimate" className="text-gray-300">Time Estimate (minutes)</Label>
-            <Input
-              id="estimate"
-              type="number"
-              value={estimateMins}
-              onChange={(e) => setEstimateMins(e.target.value)}
-              placeholder="30"
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
-              data-testid="input-task-estimate"
-            />
+            <Label htmlFor="estimate" className="text-gray-300">Time Estimate</Label>
+            <Select value={estimateMins} onValueChange={setEstimateMins}>
+              <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-gray-800 border-gray-700">
+                <SelectItem value="15">15 minutes</SelectItem>
+                <SelectItem value="30">30 minutes</SelectItem>
+                <SelectItem value="45">45 minutes</SelectItem>
+                <SelectItem value="60">1 hour</SelectItem>
+                <SelectItem value="90">1.5 hours</SelectItem>
+                <SelectItem value="120">2 hours</SelectItem>
+                <SelectItem value="180">3 hours</SelectItem>
+                <SelectItem value="240">4 hours</SelectItem>
+                <SelectItem value="300">5 hours</SelectItem>
+                <SelectItem value="360">6 hours</SelectItem>
+                <SelectItem value="420">7 hours</SelectItem>
+                <SelectItem value="480">8 hours</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           
           <div className="flex justify-end gap-3">

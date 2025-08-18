@@ -75,12 +75,12 @@ TASKS TO SCHEDULE:
 ${pendingTasks.map((t: any) => `- ID: ${t.id}, Title: ${t.title}, Priority ${t.priority}, Duration: ${t.estimateMins || 30} mins${t.dueAt ? `, Due: ${t.dueAt}` : ''}`).join('\n')}
 
 CRITICAL BUSINESS HOUR CONSTRAINTS - FOLLOW EXACTLY:
-1. **ABSOLUTE REQUIREMENT**: Only schedule between 9:00 AM and 5:00 PM in Eastern Time (EST/EDT)
-2. **TIMEZONE CRITICAL**: When generating ISO datetime strings, ensure they represent 9 AM - 5 PM Eastern Time
-3. **EXAMPLE**: For ${date}, 9:00 AM ET = "2025-08-16T13:00:00.000Z" (UTC), 5:00 PM ET = "2025-08-16T21:00:00.000Z" (UTC)
+1. **ABSOLUTE REQUIREMENT**: Only schedule between 9:00 AM and 5:00 PM in LOCAL TIME (user's timezone)
+2. **TIMEZONE CRITICAL**: When generating ISO datetime strings, use local date ${date} with times 09:00-17:00
+3. **EXAMPLE**: For ${date}, 9:00 AM local = "${date}T09:00:00.000Z", 5:00 PM local = "${date}T17:00:00.000Z"
 4. **QUARTER-HOUR ONLY**: All times MUST be on 15-minute intervals (:00, :15, :30, :45)
-5. **VALIDATION**: Every scheduled time must be between 13:00Z and 21:00Z (UTC equivalent of 9 AM - 5 PM ET)
-6. **NO EXCEPTIONS**: If you schedule anything outside 13:00Z-21:00Z range, you have failed the constraint
+5. **VALIDATION**: Every scheduled time must be between 09:00 and 17:00 on date ${date}
+6. **NO EXCEPTIONS**: If you schedule anything outside 09:00-17:00 local range, you have failed the constraint
 7. Schedule high priority tasks first, respect due dates
 8. Never schedule during existing meetings
 

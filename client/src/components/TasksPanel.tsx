@@ -232,18 +232,39 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
                                   </Select>
                                 </div>
                                 <div>
-                                  <Label htmlFor="estimateMins" className="text-gray-300">Estimate (minutes)</Label>
-                                  <Input
-                                    id="estimateMins"
-                                    type="number"
-                                    value={editForm.estimateMins}
-                                    onChange={(e) => setEditForm(prev => ({ ...prev, estimateMins: parseInt(e.target.value) || 30 }))}
-                                    className="bg-gray-800 border-gray-700 text-white"
-                                  />
+                                  <Label htmlFor="estimateMins" className="text-gray-300">Time Estimate</Label>
+                                  <Select value={editForm.estimateMins.toString()} onValueChange={(value) => setEditForm(prev => ({ ...prev, estimateMins: parseInt(value) }))}>
+                                    <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-gray-800 border-gray-700">
+                                      <SelectItem value="15">15 minutes</SelectItem>
+                                      <SelectItem value="30">30 minutes</SelectItem>
+                                      <SelectItem value="45">45 minutes</SelectItem>
+                                      <SelectItem value="60">1 hour</SelectItem>
+                                      <SelectItem value="90">1.5 hours</SelectItem>
+                                      <SelectItem value="120">2 hours</SelectItem>
+                                      <SelectItem value="180">3 hours</SelectItem>
+                                      <SelectItem value="240">4 hours</SelectItem>
+                                      <SelectItem value="300">5 hours</SelectItem>
+                                      <SelectItem value="360">6 hours</SelectItem>
+                                      <SelectItem value="420">7 hours</SelectItem>
+                                      <SelectItem value="480">8 hours</SelectItem>
+                                    </SelectContent>
+                                  </Select>
                                 </div>
-                                <Button onClick={handleEditSave} className="w-full bg-primary hover:bg-primary/90">
-                                  Save Changes
-                                </Button>
+                                <div className="flex gap-3">
+                                  <Button 
+                                    onClick={() => deleteTaskMutation.mutate(editingTask!.id)}
+                                    variant="outline"
+                                    className="flex-1 border-red-600 text-red-400 hover:bg-red-600/10"
+                                  >
+                                    Delete Task
+                                  </Button>
+                                  <Button onClick={handleEditSave} className="flex-1 bg-primary hover:bg-primary/90">
+                                    Save Changes
+                                  </Button>
+                                </div>
                               </div>
                             </DialogContent>
                           </Dialog>

@@ -21,7 +21,7 @@ interface CalendarPanelProps {
 
 // Visual constants
 const HOUR_HEIGHT_PX = 64;
-const MIN_EVENT_HEIGHT_PX = 32;
+const MIN_EVENT_HEIGHT_PX = 16; // Reduced for 15-minute granularity
 const LEFT_GUTTER_PX = 70;     // space for hour labels
 const COLUMN_GAP_PX = 4;
 const TOP_LABEL_OFFSET_PX = 8;
@@ -432,9 +432,12 @@ export default function CalendarPanel({
                     ${ev.color === "green" ? "bg-green-500/20 border-green-500 text-green-400" : ""}
                     ${ev.color === "purple" ? "bg-[#5E00E1]/20 border-[#5E00E1] text-[#8C4CFF]" : ""}
                     border-l-2 rounded px-2 py-1 h-full flex items-center justify-between
+                    ${ev.focusBlock && (ev.focusBlock as any).taskStatus === 'done' ? "opacity-60" : ""}
                   `}
                 >
-                  <p className="text-xs truncate flex-1 pr-2">{ev.title}</p>
+                  <p className={`text-xs truncate flex-1 pr-2 ${ev.focusBlock && (ev.focusBlock as any).taskStatus === 'done' ? "line-through text-gray-500" : ""}`}>
+                    {ev.title}
+                  </p>
 
                   {ev.type === "focus" && ev.focusBlock && !ev.focusBlock.confirmed && (
                     <div className="flex items-center gap-1 flex-shrink-0">

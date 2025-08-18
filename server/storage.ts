@@ -276,7 +276,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Focus Blocks
-  async getFocusBlocks(): Promise<(FocusBlock & { taskTitle?: string })[]> {
+  async getFocusBlocks(): Promise<(FocusBlock & { taskTitle?: string; taskStatus?: string })[]> {
     const result = await db
       .select({
         id: focusBlocks.id,
@@ -285,14 +285,16 @@ export class DatabaseStorage implements IStorage {
         end: focusBlocks.end,
         confirmed: focusBlocks.confirmed,
         createdAt: focusBlocks.createdAt,
-        taskTitle: tasks.title
+        taskTitle: tasks.title,
+        taskStatus: tasks.status
       })
       .from(focusBlocks)
       .leftJoin(tasks, eq(focusBlocks.taskId, tasks.id));
 
     return result.map(row => ({
       ...row,
-      taskTitle: row.taskTitle || undefined
+      taskTitle: row.taskTitle || undefined,
+      taskStatus: row.taskStatus || undefined
     }) as any);
   }
 

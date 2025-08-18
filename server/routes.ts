@@ -457,6 +457,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json(plan);
       }
 
+      // Remove existing unconfirmed focus blocks for the same tasks to ensure single instance
+      const taskIds = plan.suggestions?.map((s: any) => s.taskId) || [];
+      if (taskIds.length > 0) {
+        const existingBlocks = await storage.getFocusBlocks();
+        const blocksToRemove = existingBlocks.filter(block => 
+          taskIds.includes(block.taskId) && !block.confirmed
+        );
+        
+        for (const block of blocksToRemove) {
+          try {
+            await storage.deleteFocusBlock(block.id);
+            console.log(`Removed existing unconfirmed focus block for task ${block.taskId}`);
+          } catch (error) {
+            console.error(`Failed to remove existing focus block ${block.id}:`, error);
+          }
+        }
+      }
+
       // Create focus blocks for each suggestion
       const createdBlocks = [];
       if (plan.suggestions && Array.isArray(plan.suggestions)) {
