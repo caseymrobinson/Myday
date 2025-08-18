@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -139,8 +140,8 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md">
-        <DialogHeader>
+      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md max-h-[80vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-purple-500" />
             Connect Your Calendar
@@ -149,6 +150,8 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
             Add your Google Calendar iCal URL to sync your meetings and events.
           </DialogDescription>
         </DialogHeader>
+
+        <ScrollArea className="flex-1 pr-2">{/* Scrollable content */}
 
         <div className="space-y-4">
           <div className="space-y-2">
@@ -300,6 +303,7 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
           </>
         )}
         </div>
+        </ScrollArea>{/* End scrollable content */}
       </DialogContent>
     </Dialog>
   );
