@@ -14,7 +14,7 @@ export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showCalendarSetup, setShowCalendarSetup] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date('2024-12-02'));
   const [tasksPanelWidth, setTasksPanelWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
   const { toast } = useToast();
