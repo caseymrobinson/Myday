@@ -289,9 +289,10 @@ export default function CalendarPanel({
     return positioned;
   }, [events, focusBlocks, dayStart, dayEnd]);
 
-  // Current hour line
+  // Current time line - precise positioning
   const isToday = currentDate.toDateString() === currentTime.toDateString();
   const currentHour = isToday ? currentTime.getHours() : -1;
+  const currentMinutes = isToday ? currentTime.getMinutes() : 0;
 
   return (
     <div className="flex flex-col h-full bg-black">
@@ -396,7 +397,12 @@ export default function CalendarPanel({
                 <span className="absolute -top-2 left-0 text-xs text-gray-600 z-10">{hour.label}</span>
                 <div className="absolute bottom-0 left-0 right-0 h-px bg-gray-800/50" />
                 {isCurrentHour && (
-                  <div className="absolute left-0 right-0 top-1/2 h-px bg-red-500/50 z-30" />
+                  <div 
+                    className="absolute left-0 right-0 h-px bg-red-500 z-30" 
+                    style={{
+                      top: `${(currentMinutes / 60) * HOUR_HEIGHT_PX}px`
+                    }}
+                  />
                 )}
               </div>
             );
