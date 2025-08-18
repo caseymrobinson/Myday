@@ -22,9 +22,9 @@ interface CalendarPanelProps {
 // Visual constants
 const HOUR_HEIGHT_PX = 64;
 const MIN_EVENT_HEIGHT_PX = 32;
-const LEFT_GUTTER_PX = 32;     // space for hour labels
+const LEFT_GUTTER_PX = 70;     // space for hour labels
 const COLUMN_GAP_PX = 4;
-const TOP_LABEL_OFFSET_PX = 16;
+const TOP_LABEL_OFFSET_PX = 8;
 
 // ---------- date helpers ----------
 function startOfDayLocal(d: Date) {
