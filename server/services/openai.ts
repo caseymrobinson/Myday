@@ -112,7 +112,7 @@ const DayPlanSchemaObject = {
           estimatedMinutes: { type: "number" },
           reasoning: { type: "string" }
         },
-        required: ["taskId", "taskTitle", "start", "end"]
+        required: ["taskId", "taskTitle", "start", "end", "estimatedMinutes", "reasoning"]
       }
     },
     unscheduledTasks: {
@@ -149,7 +149,7 @@ const ExtractTasksSchemaObject = {
           context: { type: "string" },
           dueAt: { type: ["string", "null"] } // ISO or null
         },
-        required: ["title"]
+        required: ["title", "priority", "estimateMins", "context", "dueAt"]
       }
     },
     summary: { type: "string" }
@@ -345,7 +345,7 @@ Return STRICT JSON that matches the provided schema (no commentary).`;
 
       const resp = await openai.responses.create({
         model: MODEL,
-        input,
+        input: input as any,
         max_output_tokens: 1000,
         temperature: 1
       });
