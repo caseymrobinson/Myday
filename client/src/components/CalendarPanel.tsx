@@ -132,15 +132,21 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       const eventEnd = new Date(event.end);
       
       // Only include timed events that occur on this day (all-day events handled separately)
-      if (!event.isAllDay && eventStart >= dayStart && eventStart <= dayEnd) {
-        allEvents.push({
-          id: event.id,
-          title: event.title,
-          start: eventStart,
-          end: eventEnd,
-          color: 'blue',
-          type: 'calendar'
-        });
+      if (!event.isAllDay) {
+        // For timed events, check if they fall within the day range
+        const eventDateStr = eventStart.toDateString();
+        const currentDateStr = currentDate.toDateString();
+        
+        if (eventDateStr === currentDateStr) {
+          allEvents.push({
+            id: event.id,
+            title: event.title,
+            start: eventStart,
+            end: eventEnd,
+            color: 'blue',
+            type: 'calendar'
+          });
+        }
       }
     });
 
