@@ -89,5 +89,16 @@ export const api = {
   planDay: async (date: string): Promise<any> => {
     const response = await apiRequest("POST", "/api/ai/plan-day", { date });
     return response.json();
+  },
+
+  // User Settings
+  getUserEmail: async (): Promise<{ email: string | null }> => {
+    const response = await apiRequest("GET", "/api/user/email");
+    return response.json();
+  },
+
+  setUserEmail: async (email: string): Promise<{ success: boolean; message: string }> => {
+    const response = await apiRequest("POST", "/api/user/email", { email });
+    return response.json();
   }
 };

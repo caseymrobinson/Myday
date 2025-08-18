@@ -17,6 +17,7 @@ interface CalendarSetupModalProps {
 
 export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetupModalProps) {
   const [calendarUrl, setCalendarUrl] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -27,11 +28,24 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
     enabled: open
   });
 
+  // Fetch existing user email
+  const { data: existingEmail } = useQuery({
+    queryKey: ['/api/user/email'],
+    queryFn: api.getUserEmail,
+    enabled: open
+  });
+
   useEffect(() => {
     if (existingUrl?.url) {
       setCalendarUrl(existingUrl.url);
     }
   }, [existingUrl]);
+
+  useEffect(() => {
+    if (existingEmail?.email) {
+      setUserEmail(existingEmail.email);
+    }
+  }, [existingEmail]);
 
   const setCalendarMutation = useMutation({
     mutationFn: (url: string) => api.setupCalendar(url),
@@ -94,10 +108,30 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
     }
   });
 
+  const setEmailMutation = useMutation({
+    mutationFn: (email: string) => api.setUserEmail(email),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user/email'] });
+      toast({ title: "Email saved successfully" });
+    },
+    onError: () => {
+      toast({ 
+        title: "Failed to save email", 
+        description: "Please check your email format and try again",
+        variant: "destructive" 
+      });
+    }
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!calendarUrl.trim()) return;
     setCalendarMutation.mutate(calendarUrl);
+  };
+
+  const handleEmailSave = () => {
+    if (!userEmail.trim()) return;
+    setEmailMutation.mutate(userEmail);
   };
 
   const isValidUrl = calendarUrl.includes('calendar.google.com/calendar/ical') || 
@@ -116,24 +150,52 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="calendar-url" className="text-gray-300">
-              iCal URL
+            <Label htmlFor="user-email" className="text-gray-300">
+              Your Email
             </Label>
             <Input
-              id="calendar-url"
-              type="url"
-              value={calendarUrl}
-              onChange={(e) => setCalendarUrl(e.target.value)}
-              placeholder="https://calendar.google.com/calendar/ical/..."
+              id="user-email"
+              type="email"
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+              placeholder="your.email@example.com"
               className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
-              data-testid="input-calendar-url"
+              data-testid="input-user-email"
             />
-            {calendarUrl && !isValidUrl && (
-              <p className="text-xs text-yellow-500">
-                This doesn't look like a valid Google Calendar iCal URL
-              </p>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={handleEmailSave}
+                disabled={setEmailMutation.isPending || !userEmail.trim()}
+                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 text-sm"
+                data-testid="button-save-email"
+              >
+                {setEmailMutation.isPending ? "Saving..." : "Save Email"}
+              </Button>
+            </div>
+          </div>
+          
+          <div className="border-t border-gray-700 pt-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="calendar-url" className="text-gray-300">
+                  iCal URL
+                </Label>
+                <Input
+                  id="calendar-url"
+                  type="url"
+                  value={calendarUrl}
+                  onChange={(e) => setCalendarUrl(e.target.value)}
+                  placeholder="https://calendar.google.com/calendar/ical/..."
+                  className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+                  data-testid="input-calendar-url"
+                />
+                {calendarUrl && !isValidUrl && (
+                  <p className="text-xs text-yellow-500">
+                    This doesn't look like a valid Google Calendar iCal URL
+                  </p>
             )}
             {existingUrl?.url && (
               <p className="text-xs text-green-500 flex items-center gap-1">
@@ -178,6 +240,7 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
             </Button>
           </div>
         </form>
+        </div>
 
         {existingUrl?.url && (
           <>
@@ -236,6 +299,7 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
             </div>
           </>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   );

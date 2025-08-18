@@ -2,7 +2,21 @@
 
 My Day is an AI-first daily planning assistant that combines calendar integration, intelligent task scheduling, and natural language interaction to help users manage their day effectively. The application provides a unified three-pane interface (tasks, calendar, and chat) with features like Google Calendar integration via iCal URL, smart task management with multiple sources (manual, Slack, AI), AI-powered scheduling suggestions, and natural language chat capabilities.
 
-## Recent Changes (Aug 17, 2025)
+## Recent Changes (Aug 18, 2025)
+- **✅ COMPLETED: User Email Setting in Calendar Setup** - Added email storage functionality to settings panel
+  - **New email field**: Calendar setup modal now includes user email input with validation
+  - **Database integration**: User email stored in settings table using existing key-value structure
+  - **API endpoints**: Added GET/POST /api/user/email for retrieving and saving user email
+  - **Form validation**: Email format validation with proper error handling
+  - **UI enhancement**: Clean separation between email section and calendar URL section with save button
+  - **Persistent storage**: Email persists across sessions and builds using PostgreSQL settings table
+- **✅ FIXED: Calendar Task Positioning** - Improved visual alignment of events and focus blocks
+  - **Better time alignment**: Reduced TOP_LABEL_OFFSET_PX from 16 to 8 pixels for accurate hour mark positioning
+  - **Enhanced task card layout**: Moved check/X buttons to right side, task titles get full left space
+  - **Fixed dismiss functionality**: Added missing DELETE /api/focus-blocks/:id endpoint with proper error handling
+  - **Improved UX**: Tasks no longer have truncated titles due to action button positioning
+
+## Previous Changes (Aug 17, 2025)
 - **✅ COMPLETED: Advanced Calendar Service Optimization** - User refined calendar-v2.ts with significant performance improvements
   - **Optimized sync performance**: Calendar sync now completes in ~80 seconds (down from 3+ minutes)
   - **Perfect accuracy**: Successfully processes all 818 relevant events with 0 errors and 0 skipped events

@@ -239,6 +239,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // User email settings
+  app.get("/api/user/email", async (req, res) => {
+    try {
+      const email = await storage.getSetting("user_email");
+      res.json({ email: email || null });
+    } catch (error) {
+      console.error("Failed to get user email:", error);
+      res.status(500).json({ message: "Failed to get user email" });
+    }
+  });
+  
+  app.post("/api/user/email", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== 'string') {
+        res.status(400).json({ message: "Invalid email provided" });
+        return;
+      }
+      
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        res.status(400).json({ message: "Invalid email format" });
+        return;
+      }
+      
+      await storage.setSetting("user_email", email);
+      res.json({ success: true, message: "User email saved successfully" });
+    } catch (error) {
+      console.error("Failed to save user email:", error);
+      res.status(500).json({ message: "Failed to save user email" });
+    }
+  });
+
   app.post("/api/sync-calendar", async (req, res) => {
     try {
       const stats = await calendarServiceV2.syncCalendar();
