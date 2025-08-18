@@ -243,9 +243,14 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
   dayEnd.setHours(23, 59, 59, 999);
   
   const allDayEvents = events?.filter(event => {
+    if (!event.isAllDay) return false;
+    
+    // For all-day events, compare just the date part to avoid timezone issues
     const eventStart = new Date(event.start);
-    const eventEnd = new Date(event.end);
-    return event.isAllDay && eventStart >= dayStart && eventStart <= dayEnd;
+    const eventDateStr = eventStart.toISOString().split('T')[0];
+    const currentDateStr = currentDate.toISOString().split('T')[0];
+    
+    return eventDateStr === currentDateStr;
   }) || [];
 
   // Get current hour for highlighting (only if viewing today)

@@ -509,10 +509,22 @@ export class CalendarServiceV2 {
 
   async getEventsForDate(date: string): Promise<any[]> {
     const events = await storage.getCalendarEvents();
-    const target = new Date(date).toDateString();
-
+    const targetDate = new Date(date);
+    
     return events
-      .filter(e => new Date(e.start).toDateString() === target)
+      .filter(e => {
+        const eventStart = new Date(e.start);
+        
+        // For all-day events, compare just the date part (YYYY-MM-DD)
+        if (e.isAllDay || (e as any).is_all_day) {
+          const eventDateStr = eventStart.toISOString().split('T')[0];
+          const targetDateStr = targetDate.toISOString().split('T')[0];
+          return eventDateStr === targetDateStr;
+        }
+        
+        // For timed events, use the original date string comparison
+        return eventStart.toDateString() === targetDate.toDateString();
+      })
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
       .map(e => ({
         id: e.id,
