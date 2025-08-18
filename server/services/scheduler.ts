@@ -18,6 +18,12 @@ export class SchedulerService {
   async generateScheduleSuggestions(date: string): Promise<ScheduleSuggestion[]> {
     const targetDate = new Date(date);
     
+    // Skip weekends
+    const dayOfWeek = targetDate.getDay(); // 0 = Sunday, 6 = Saturday
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return []; // No suggestions for weekends
+    }
+    
     // Get existing meetings and confirmed focus blocks
     const meetings = await this.getMeetingsForDate(date);
     const confirmedBlocks = await this.getConfirmedFocusBlocksForDate(date);
@@ -86,12 +92,12 @@ export class SchedulerService {
   }
 
   private findFreeTimeSlots(date: Date, meetings: TimeSlot[], confirmedBlocks: TimeSlot[]): TimeSlot[] {
-    // Create business hours in Eastern Time (9 AM - 5 PM ET)
+    // Create business hours (9 AM - 5 PM local time)
     const workDayStart = new Date(date);
-    workDayStart.setUTCHours(13, 0, 0, 0); // 9 AM ET = 13:00 UTC
+    workDayStart.setHours(9, 0, 0, 0); // 9 AM local time
     
     const workDayEnd = new Date(date);
-    workDayEnd.setUTCHours(21, 0, 0, 0); // 5 PM ET = 21:00 UTC
+    workDayEnd.setHours(17, 0, 0, 0); // 5 PM local time
     
     // Combine all busy slots
     const busySlots = [...meetings, ...confirmedBlocks]
@@ -142,16 +148,22 @@ export class SchedulerService {
         const slotDuration = slot.end.getTime() - slot.start.getTime();
         
         if (slotDuration >= durationMs) {
-          // Create suggestion
-          const suggestionEnd = new Date(slot.start.getTime() + durationMs);
+          const suggestedEnd = new Date(slot.start.getTime() + durationMs);
           
-          suggestions.push({
-            taskId: task.id,
-            taskTitle: task.title,
-            start: slot.start.toISOString(),
-            end: suggestionEnd.toISOString(),
-            estimateMins
-          });
+          // Ensure task doesn't end after 5 PM
+          const dayEnd = new Date(slot.start);
+          dayEnd.setHours(17, 0, 0, 0);
+          
+          if (suggestedEnd <= dayEnd) {
+            // Create suggestion
+            suggestions.push({
+              taskId: task.id,
+              taskTitle: task.title,
+              start: slot.start.toISOString(),
+              end: suggestedEnd.toISOString(),
+              estimateMins
+            });
+          }
           
           // Update the available slot
           if (slotDuration > durationMs) {

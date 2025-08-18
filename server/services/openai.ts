@@ -50,18 +50,26 @@ export class OpenAIService {
       }
       
       // Build prompt for AI with multi-day support
-      const prompt = `You are an intelligent day planner. Given the following calendar events and tasks, create an optimal schedule.
+      const prompt = `You are an intelligent day planner. Create an optimal schedule considering working hours (9 AM - 5 PM), task priorities, due dates, and available time gaps.
+
+IMPORTANT SCHEDULING RULES:
+- Only schedule tasks between 9:00 AM and 5:00 PM
+- No tasks should start before 9 AM or end after 5 PM
+- Do not schedule on weekends
+- Consider task priority (1=low, 2=medium, 3=high) when selecting which tasks to schedule
+- Consider due dates - prioritize tasks that are due soon
+- Make efficient use of available time gaps
 
 Current Date: ${date}
 Current Time: ${new Date().toISOString()}
 
 TODAY'S CALENDAR (${date}):
 Meetings (Fixed): ${meetingsToday.length > 0 ? meetingsToday.map((m: any) => `\n  - ${m.title}: ${m.start} to ${m.end}`).join('') : '\n  - No meetings'}
-Free Time Blocks: ${freeBlocksToday.length > 0 ? freeBlocksToday.map((b: any) => `\n  - ${b.start} to ${b.end}`).join('') : '\n  - No free time today'}
+Free Time Blocks (9AM-5PM only): ${freeBlocksToday.length > 0 ? freeBlocksToday.map((b: any) => `\n  - ${b.start} to ${b.end}`).join('') : '\n  - No free time today'}
 
 TOMORROW'S CALENDAR (${tomorrow.toISOString().split('T')[0]}):
 Meetings (Fixed): ${meetingsTomorrow.length > 0 ? meetingsTomorrow.map((m: any) => `\n  - ${m.title}: ${m.start} to ${m.end}`).join('') : '\n  - No meetings'}
-Free Time Blocks: ${freeBlocksTomorrow.length > 0 ? freeBlocksTomorrow.map((b: any) => `\n  - ${b.start} to ${b.end}`).join('') : '\n  - No free time tomorrow'}
+Free Time Blocks (9AM-5PM only): ${freeBlocksTomorrow.length > 0 ? freeBlocksTomorrow.map((b: any) => `\n  - ${b.start} to ${b.end}`).join('') : '\n  - No free time tomorrow'}
 
 TASKS TO SCHEDULE:
 ${pendingTasks.map((t: any) => `- ID: ${t.id}, Title: ${t.title}, Priority ${t.priority}, Duration: ${t.estimateMins || 30} mins${t.dueAt ? `, Due: ${t.dueAt}` : ''}`).join('\n')}
