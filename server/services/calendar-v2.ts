@@ -1,6 +1,6 @@
 // Calendar sync with recurrence expansion (RRULE + EXDATE + RECURRENCE-ID + RDATE),
-// low memory (per-event, per-month processing), idempotent upserts, and one-time
-// cleanup to purge legacy rows so duplicates don't stick around.
+// low memory (per-event, per-month processing), idempotent upserts, one-time cleanup,
+// and filtering out events where YOU have declined (PARTSTAT=DECLINED).
 //
 // Uses only node-ical (no ical-expander).
 
@@ -23,6 +23,19 @@ interface SyncStats {
   errorMessages: string[];
 }
 
+type IcalAttendee =
+  | string
+  | {
+      val?: string;           // e.g. "mailto:you@yourdomain.com"
+      params?: {
+        CN?: string;
+        PARTSTAT?: string;    // ACCEPTED | TENTATIVE | DECLINED | NEEDS-ACTION
+        ROLE?: string;
+        [k: string]: any;
+      };
+      [k: string]: any;
+    };
+
 export class CalendarServiceV2 {
   private icsUrl: string | null = null;
   private isRunning = false;
@@ -38,6 +51,9 @@ export class CalendarServiceV2 {
   // One-time migration flag key
   private readonly MIGRATION_FLAG = "calendar_v2_migrated";
 
+  // Identity for decline filtering
+  private selfEmails: Set<string> = new Set(); // lowercase emails
+
   // Status snapshot (for UI/debug)
   private syncStatus = {
     lastSync: null as Date | null,
@@ -48,7 +64,12 @@ export class CalendarServiceV2 {
   };
 
   constructor() {
-    void this.initializeCalendarUrl().then(() => this.startCronJob());
+    void this.initialize().then(() => this.startCronJob());
+  }
+
+  private async initialize() {
+    await this.initializeCalendarUrl();
+    await this.loadSelfEmails();
   }
 
   private async initializeCalendarUrl() {
@@ -63,11 +84,47 @@ export class CalendarServiceV2 {
     }
   }
 
+  private async loadSelfEmails() {
+    try {
+      const raw =
+        (await storage.getSetting("calendar_self_emails")) ||
+        process.env.CALENDAR_SELF_EMAILS ||
+        (await storage.getSetting("calendar_self_email")) || // legacy single value
+        (await storage.getSetting("user_email")) || // new user email setting
+        process.env.CALENDAR_SELF_EMAIL ||
+        "";
+
+      const parts = raw
+        .split(/[,\s;]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+
+      this.selfEmails = new Set(parts);
+      if (this.selfEmails.size) {
+        console.info("[CalendarV2] Self identity loaded:", Array.from(this.selfEmails).join(", "));
+      } else {
+        console.info("[CalendarV2] No self identity configured; decline filtering disabled.");
+      }
+    } catch (err) {
+      console.warn("[CalendarV2] Failed to load self emails:", err);
+      this.selfEmails.clear();
+    }
+  }
+
   async setIcsUrl(url: string): Promise<void> {
     this.icsUrl = url;
     await storage.setSetting("calendar_url", url);
+    // reload identity in case user set env/settings concurrently
+    await this.loadSelfEmails();
     this.restartCron();
     await this.syncCalendar();
+  }
+
+  // Optional helper if you expose a UI for it
+  async setSelfEmails(emails: string | string[]): Promise<void> {
+    const raw = Array.isArray(emails) ? emails.join(",") : emails;
+    await storage.setSetting("calendar_self_emails", raw);
+    await this.loadSelfEmails();
   }
 
   getIcsUrl(): string | null {
@@ -100,7 +157,6 @@ export class CalendarServiceV2 {
   }
 
   // ---------- Cron management ----------
-
   private restartCron() {
     this.stopCronJob();
     this.startCronJob();
@@ -131,7 +187,6 @@ export class CalendarServiceV2 {
   }
 
   // ---------- Utilities ----------
-
   private makeOccurrenceId(uid: string, start: Date): string {
     // Stable, per-occurrence ID
     return `${uid}::${start.toISOString()}`;
@@ -185,7 +240,6 @@ export class CalendarServiceV2 {
 
   private findOverride<T = any>(map: Record<string, any> | undefined, date: Date): T | null {
     if (!map) return null;
-    // Common key encodings in node-ical
     const iso = date.toISOString();
     if (map[iso]) return map[iso] as T;
     const keyZ = this.formatICSDateUTC(date);
@@ -213,15 +267,17 @@ export class CalendarServiceV2 {
     } else if (r instanceof Date) {
       out.push(new Date(r));
     }
-    return out.filter(d => !isNaN(d.getTime()));
+    return out.filter((d) => !isNaN(d.getTime()));
   }
 
   private isAllDay(start: Date, end: Date, src: any): boolean {
     if (src?.datetype === "date") return true;
     const fullDays = (end.getTime() - start.getTime()) % 86_400_000 === 0;
     const midnightUTC =
-      start.getUTCHours() === 0 && start.getUTCMinutes() === 0 &&
-      end.getUTCHours() === 0 && end.getUTCMinutes() === 0;
+      start.getUTCHours() === 0 &&
+      start.getUTCMinutes() === 0 &&
+      end.getUTCHours() === 0 &&
+      end.getUTCMinutes() === 0;
     return fullDays && midnightUTC;
   }
 
@@ -241,7 +297,6 @@ export class CalendarServiceV2 {
   }
 
   private async maybeRunOneTimeCleanup(): Promise<void> {
-    // If we’ve never migrated to v2 IDs, nuke the table once to purge legacy rows.
     try {
       const migrated = await storage.getSetting(this.MIGRATION_FLAG);
       if (migrated === "1") return;
@@ -253,8 +308,78 @@ export class CalendarServiceV2 {
     }
   }
 
-  // ---------- Core sync (node-ical only) ----------
+  // ---------- Decline filtering ----------
+  private normalizeAttendeeList(attendee: IcalAttendee | IcalAttendee[] | undefined | null): IcalAttendee[] {
+    if (!attendee) return [];
+    return Array.isArray(attendee) ? attendee : [attendee];
+  }
 
+  private extractEmailLower(a: IcalAttendee): string | null {
+    if (typeof a === "string") {
+      const s = a.trim();
+      const m = s.match(/mailto:([^>;]+)/i);
+      return (m ? m[1] : s).trim().toLowerCase();
+    }
+    if (a && typeof a === "object") {
+      if (a.val) {
+        const m = String(a.val).match(/mailto:([^>;]+)/i);
+        return (m ? m[1] : String(a.val)).trim().toLowerCase();
+      }
+    }
+    return null;
+  }
+
+  private attendeePartstat(a: IcalAttendee): string | null {
+    if (typeof a === "string") {
+      // a raw string usually loses params; treat as unknown
+      return null;
+    }
+    const ps = a?.params?.PARTSTAT || a?.params?.partstat;
+    return ps ? String(ps).toUpperCase() : null;
+  }
+
+  private isDeclinedForSelf(src: any): boolean {
+    if (!this.selfEmails.size) return false;
+    // Microsoft/Google often put attendees on "attendee" or "attendees"
+    const list = this.normalizeAttendeeList(src.attendee || (src.attendees as any));
+    for (const a of list) {
+      const email = this.extractEmailLower(a);
+      if (!email || !this.selfEmails.has(email)) continue;
+      const ps = this.attendeePartstat(a);
+      if (ps === "DECLINED") return true;
+    }
+    return false;
+  }
+
+  private isAcceptedOrTentativeForSelf(src: any): boolean {
+    if (!this.selfEmails.size) return false;
+    const list = this.normalizeAttendeeList(src.attendee || (src.attendees as any));
+    for (const a of list) {
+      const email = this.extractEmailLower(a);
+      if (!email || !this.selfEmails.has(email)) continue;
+      const ps = this.attendeePartstat(a);
+      if (ps === "ACCEPTED" || ps === "TENTATIVE") return true;
+    }
+    return false;
+  }
+
+  /**
+   * Decide if an occurrence should be skipped because you declined.
+   * If an override exists, it wins. Otherwise, series-level PARTSTAT applies.
+   */
+  private shouldSkipForDecline(base: any, override?: any): boolean {
+    // Always ignore cancelled
+    if (override?.status === "CANCELLED" || base?.status === "CANCELLED") return true;
+
+    if (override) {
+      if (this.isDeclinedForSelf(override)) return true;
+      if (this.isAcceptedOrTentativeForSelf(override)) return false; // explicit per-instance acceptance beats series-level decline
+      // fallthrough to series-level if override didn't state anything
+    }
+    return this.isDeclinedForSelf(base);
+  }
+
+  // ---------- Core sync (node-ical only) ----------
   async syncCalendar(): Promise<SyncStats> {
     const stats: SyncStats = {
       totalParsed: 0,
@@ -311,6 +436,14 @@ export class CalendarServiceV2 {
         }
 
         const uid: string = e.uid || key;
+
+        // If entire series is cancelled or you declined the entire series, we can fast-skip
+        if (e.status === "CANCELLED" || this.shouldSkipForDecline(e)) {
+          stats.eventsSkipped++;
+          delete (parsedCal as any)[key];
+          continue;
+        }
+
         const baseStart = new Date(e.start);
         const baseEnd = e.end ? new Date(e.end) : new Date(baseStart.getTime() + 3_600_000);
         if (isNaN(baseStart.getTime()) || isNaN(baseEnd.getTime())) {
@@ -326,22 +459,27 @@ export class CalendarServiceV2 {
         // Non-recurring
         if (!e.rrule) {
           if (baseStart >= rangeStart && baseStart < rangeEnd) {
-            const id = this.makeOccurrenceId(uid, baseStart);
-            try {
-              await this.upsertEvent({
-                id,
-                title: e.summary || "Untitled Event",
-                start: baseStart,
-                end: baseEnd,
-                location: e.location ?? null,
-                description: e.description ?? null,
-                isAllDay: this.isAllDay(baseStart, baseEnd, e)
-              });
-              touchedIds.add(id);
-              stats.eventsStored++; stats.eventsFound++; stats.totalParsed++;
-            } catch (err) {
-              stats.errors++; stats.errorMessages.push(String(err));
-              console.error("[CalendarV2] Upsert failed (single):", id, err);
+            // final decline guard (single)
+            if (this.shouldSkipForDecline(e)) {
+              stats.eventsSkipped++;
+            } else {
+              const id = this.makeOccurrenceId(uid, baseStart);
+              try {
+                await this.upsertEvent({
+                  id,
+                  title: e.summary || "Untitled Event",
+                  start: baseStart,
+                  end: baseEnd,
+                  location: e.location ?? null,
+                  description: e.description ?? null,
+                  isAllDay: this.isAllDay(baseStart, baseEnd, e)
+                });
+                touchedIds.add(id);
+                stats.eventsStored++; stats.eventsFound++; stats.totalParsed++;
+              } catch (err) {
+                stats.errors++; stats.errorMessages.push(String(err));
+                console.error("[CalendarV2] Upsert failed (single):", id, err);
+              }
             }
           } else {
             stats.eventsSkipped++;
@@ -372,6 +510,12 @@ export class CalendarServiceV2 {
 
             // Excluded?
             if (!ov && this.findOverride<any>(exdates, dt)) {
+              stats.eventsSkipped++;
+              continue;
+            }
+
+            // Declined filtering per occurrence
+            if (this.shouldSkipForDecline(e, ov)) {
               stats.eventsSkipped++;
               continue;
             }
@@ -407,6 +551,12 @@ export class CalendarServiceV2 {
             const en = r.end ? new Date(r.end) : new Date(s.getTime() + duration);
             if (isNaN(s.getTime()) || isNaN(en.getTime())) continue;
             if (s >= sliceStart && s < sliceEnd) {
+              // Declined filtering for explicit override rows
+              if (this.shouldSkipForDecline(e, r)) {
+                stats.eventsSkipped++;
+                continue;
+              }
+
               const id = this.makeOccurrenceId(uid, s);
               if (seenIds.has(id)) continue;
               seenIds.add(id);
@@ -421,8 +571,8 @@ export class CalendarServiceV2 {
                   description: r.description ?? e.description ?? null,
                   isAllDay: this.isAllDay(s, en, r)
                 });
-                touchedIds.add(id);
-                stats.eventsStored++; stats.eventsFound++; stats.totalParsed++;
+              touchedIds.add(id);
+              stats.eventsStored++; stats.eventsFound++; stats.totalParsed++;
               } catch (err) {
                 stats.errors++; stats.errorMessages.push(String(err));
                 console.error("[CalendarV2] Upsert failed (loose override):", id, err);
@@ -434,6 +584,11 @@ export class CalendarServiceV2 {
           for (const rd of rdates) {
             if (rd >= sliceStart && rd < sliceEnd) {
               if (this.findOverride<any>(exdates, rd)) continue; // cancelled
+              // Decline filtering uses base because RDATE doesn't carry per-instance attendee state
+              if (this.shouldSkipForDecline(e)) {
+                stats.eventsSkipped++;
+                continue;
+              }
               const s = rd;
               const en = new Date(s.getTime() + duration);
               const id = this.makeOccurrenceId(uid, s);
@@ -469,11 +624,10 @@ export class CalendarServiceV2 {
       // Prune stale rows inside our range that were not touched this run
       try {
         const all = await storage.getCalendarEvents();
-        const touched = touchedIds;
         for (const row of all) {
           const s = new Date(row.start);
           if (s >= rangeStart && s < rangeEnd) {
-            if (!touched.has(row.id)) {
+            if (!touchedIds.has(row.id)) {
               await storage.deleteCalendarEvent(row.id);
             }
           }
@@ -506,27 +660,26 @@ export class CalendarServiceV2 {
   }
 
   // ---------- Query helpers for the UI ----------
-
   async getEventsForDate(date: string): Promise<any[]> {
     const events = await storage.getCalendarEvents();
     const targetDate = new Date(date);
-    
+
     return events
-      .filter(e => {
+      .filter((e) => {
         const eventStart = new Date(e.start);
-        
-        // For all-day events, compare just the date part (YYYY-MM-DD)
+        // All-day: match by local date string to avoid tz shift
         if (e.isAllDay || (e as any).is_all_day) {
-          const eventDateStr = eventStart.toISOString().split('T')[0];
-          const targetDateStr = targetDate.toISOString().split('T')[0];
-          return eventDateStr === targetDateStr;
+          const eventDateStr = new Date(
+            eventStart.getUTCFullYear(),
+            eventStart.getUTCMonth(),
+            eventStart.getUTCDate()
+          ).toDateString();
+          return eventDateStr === targetDate.toDateString();
         }
-        
-        // For timed events, use the original date string comparison
         return eventStart.toDateString() === targetDate.toDateString();
       })
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
-      .map(e => ({
+      .map((e) => ({
         id: e.id,
         title: e.title,
         start: new Date(e.start).toISOString(),
@@ -541,12 +694,12 @@ export class CalendarServiceV2 {
     const events = await storage.getCalendarEvents();
 
     return events
-      .filter(e => {
+      .filter((e) => {
         const s = new Date(e.start);
         return s >= startDate && s <= endDate;
       })
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
-      .map(e => ({
+      .map((e) => ({
         id: e.id,
         title: e.title,
         start: new Date(e.start).toISOString(),

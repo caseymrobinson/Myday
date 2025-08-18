@@ -15,6 +15,16 @@ My Day is an AI-first daily planning assistant that combines calendar integratio
   - **Enhanced task card layout**: Moved check/X buttons to right side, task titles get full left space
   - **Fixed dismiss functionality**: Added missing DELETE /api/focus-blocks/:id endpoint with proper error handling
   - **Improved UX**: Tasks no longer have truncated titles due to action button positioning
+- **✅ COMPLETED: Settings Modal Scrollability** - Made calendar setup modal scrollable to handle all content properly
+  - **Responsive design**: Modal constrained to max-height of 80vh with proper flex layout
+  - **ScrollArea integration**: Added scroll functionality for content overflow
+  - **Fixed header**: Modal header stays visible while content scrolls
+  - **Better UX**: Settings never go off-screen on any device size
+- **✅ COMPLETED: Calendar Decline Filtering** - Integrated user email for filtering declined calendar events
+  - **Email integration**: Calendar service now uses stored user email for event filtering
+  - **Decline detection**: Events where user has PARTSTAT=DECLINED are automatically filtered out
+  - **Database integration**: Calendar-v2.ts loads email from user_email setting for proper identification
+  - **Improved calendar accuracy**: Only shows events user actually plans to attend
 
 ## Previous Changes (Aug 17, 2025)
 - **✅ COMPLETED: Advanced Calendar Service Optimization** - User refined calendar-v2.ts with significant performance improvements
