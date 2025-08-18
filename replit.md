@@ -3,6 +3,17 @@
 My Day is an AI-first daily planning assistant that combines calendar integration, intelligent task scheduling, and natural language interaction to help users manage their day effectively. The application provides a unified three-pane interface (tasks, calendar, and chat) with features like Google Calendar integration via iCal URL, smart task management with multiple sources (manual, Slack, AI), AI-powered scheduling suggestions, and natural language chat capabilities.
 
 ## Recent Changes (Aug 18, 2025)
+- **✅ COMPLETED: Due Date Support** - Added optional due date functionality to task management
+  - **Task creation modal**: Added due date picker with proper dark theme styling
+  - **Task editing modal**: Added due date field that loads existing dates and saves updates
+  - **Database integration**: Due dates stored as timestamp and properly handled in API
+  - **AI scheduling**: Due dates included in OpenAI prompt for priority-based scheduling
+  - **Form handling**: Proper date conversion between ISO strings and form inputs
+- **✅ FIXED: Timezone Issues in AI Scheduling** - Resolved 3 AM scheduling problem with proper local time handling
+  - **Local time enforcement**: AI now returns datetime strings without UTC "Z" suffix for proper local interpretation
+  - **Business hours**: Tasks strictly scheduled between 9:00 AM - 5:00 PM local time
+  - **OpenAI prompt**: Updated with clear examples using local time format (T09:00:00.000 not T09:00:00.000Z)
+  - **No more early scheduling**: Fixed issue where tasks appeared at 3 AM due to timezone conversion errors
 - **✅ COMPLETED: User Email Setting in Calendar Setup** - Added email storage functionality to settings panel
   - **New email field**: Calendar setup modal now includes user email input with validation
   - **Database integration**: User email stored in settings table using existing key-value structure

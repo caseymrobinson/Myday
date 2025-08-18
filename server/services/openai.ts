@@ -76,13 +76,14 @@ ${pendingTasks.map((t: any) => `- ID: ${t.id}, Title: ${t.title}, Priority ${t.p
 
 CRITICAL BUSINESS HOUR CONSTRAINTS - FOLLOW EXACTLY:
 1. **ABSOLUTE REQUIREMENT**: Only schedule between 9:00 AM and 5:00 PM in LOCAL TIME (user's timezone)
-2. **TIMEZONE CRITICAL**: When generating ISO datetime strings, use local date ${date} with times 09:00-17:00
-3. **EXAMPLE**: For ${date}, 9:00 AM local = "${date}T09:00:00.000Z", 5:00 PM local = "${date}T17:00:00.000Z"
+2. **TIMEZONE CRITICAL**: When generating ISO datetime strings, use local date ${date} with times 09:00-17:00 WITHOUT timezone suffix
+3. **EXAMPLE**: For ${date}, 9:00 AM local = "${date}T09:00:00.000", 5:00 PM local = "${date}T17:00:00.000" (NO Z suffix!)
 4. **QUARTER-HOUR ONLY**: All times MUST be on 15-minute intervals (:00, :15, :30, :45)
-5. **VALIDATION**: Every scheduled time must be between 09:00 and 17:00 on date ${date}
-6. **NO EXCEPTIONS**: If you schedule anything outside 09:00-17:00 local range, you have failed the constraint
-7. Schedule high priority tasks first, respect due dates
-8. Never schedule during existing meetings
+5. **VALIDATION**: Every scheduled time must be between T09:00:00.000 and T17:00:00.000 on date ${date}
+6. **NO EXCEPTIONS**: If you schedule anything outside T09:00-T17:00 local range, you have failed the constraint
+7. **CRITICAL**: Do NOT use UTC time or Z suffix - use local time only
+8. Schedule high priority tasks first, respect due dates
+9. Never schedule during existing meetings
 
 Return a JSON object with this structure:
 {
@@ -111,7 +112,7 @@ Return a JSON object with this structure:
       console.log('Sending prompt to OpenAI:', prompt.substring(0, 500) + '...');
       
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5",
         messages: [
           {
             role: "system",
@@ -184,7 +185,7 @@ Return a JSON object with this structure:
 
       // Generic conversation
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-5",
         messages,
         max_tokens: 500
       });
@@ -336,7 +337,7 @@ Format the response as a friendly, conversational summary that includes:
 Keep it concise but comprehensive.`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-5",
         messages: [
           {
             role: "system",
@@ -370,7 +371,7 @@ Keep it concise but comprehensive.`;
   async extractTasksFromText(textContent: string): Promise<{ tasks: any[], summary: string }> {
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-5",
         messages: [
           {
             role: "system",
