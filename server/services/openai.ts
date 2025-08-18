@@ -4,7 +4,7 @@ import { schedulerService } from "./scheduler";
 import { storage } from "../storage";
 
 // ---------- Config ----------
-const MODEL = process.env.OPENAI_MODEL || "gpt-5-mini"; // your preference
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini"; // your preference
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 
 // ---------- Time helpers (local, with offset) ----------
@@ -142,46 +142,33 @@ export class OpenAIService {
       const workStartTomorrow = toLocalISO(localDayStart(tomorrow, 9, 0));
       const workEndTomorrow = toLocalISO(localDayStart(tomorrow, 17, 0));
 
-      // Build prompt
-      const prompt = `You are an intelligent day planner. Create an optimal schedule considering working hours, task priorities, due dates, and available time gaps.
-All times are LOCAL to the user. Timezone: "${localTz}". All timestamps below include numeric offsets. Do not convert them to Z.
+      // Build simplified prompt to avoid token limits
+      const prompt = `Schedule pending tasks for ${date}. Work hours: 9 AM - 5 PM local time.
 
-HARD CONSTRAINTS:
-- Schedule tasks only during 09:00–17:00 local on business days (no weekends).
-- Do not overlap any "Meetings (Fixed)" intervals.
-- Use 15-minute increments only (:00, :15, :30, :45).
-- Use the provided anchors for day bounds. For ${date}: start=${workStartToday}, end=${workEndToday}. For ${tomorrow}: start=${workStartTomorrow}, end=${workEndTomorrow}.
-- Return strictly valid JSON (no markdown, no comments).
+PENDING TASKS:
+${pendingTasks.slice(0, 5).map((t: any) => 
+  `- ID: ${t.id}, Title: "${t.title}", Priority: ${t.priority ?? 2}, Duration: ${t.estimateMins ?? 30}min${t.dueAt ? `, Due: ${new Date(t.dueAt).toLocaleDateString()}` : ''}`
+).join('\n') || '- None'}
 
-TODAY ${date} (${localTz}):
-Meetings (Fixed):
-${mapMeetings(meetingsToday).map(m => `- ${m.title}: ${m.start} to ${m.end}${m.isAllDay ? " (all-day)" : ""}`).join("\n") || "- None"}
-Free time blocks:
-${mapBlocks(freeBlocksToday).map(b => `- ${b.start} to ${b.end}`).join("\n") || "- None"}
+TODAY'S MEETINGS:
+${mapMeetings(meetingsToday).slice(0, 5).map(m => 
+  `- ${m.title}: ${new Date(m.start).toLocaleTimeString()} - ${new Date(m.end).toLocaleTimeString()}`
+).join('\n') || '- None'}
 
-TOMORROW ${tomorrow} (${localTz}):
-Meetings (Fixed):
-${mapMeetings(meetingsTomorrow).map(m => `- ${m.title}: ${m.start} to ${m.end}${m.isAllDay ? " (all-day)" : ""}`).join("\n") || "- None"}
-Free time blocks:
-${mapBlocks(freeBlocksTomorrow).map(b => `- ${b.start} to ${b.end}`).join("\n") || "- None"}
-
-TASKS (pending only):
-${pendingTasks
-  .map(
-    (t: any) =>
-      `- ${t.id} | ${t.title} | priority=${t.priority ?? 2} | estimate=${t.estimateMins ?? 30}m${
-        t.dueAt ? ` | due=${toLocalISO(new Date(t.dueAt))}` : ""
-      }`
-  )
-  .join("\n") || "- None"}
+RULES:
+- Schedule between 9:00 AM - 5:00 PM only
+- Use 15-minute intervals (:00, :15, :30, :45)  
+- Avoid meeting conflicts
+- Format times as ${date}T09:00:00.000 (NO Z suffix)
+- Prioritize high-priority tasks and due dates
 
 Return JSON:
 {
   "scheduledTasks": [
-    { "taskId": "...", "taskTitle": "...", "start": "<local ISO with offset>", "end": "<local ISO with offset>", "estimatedMinutes": 30, "reasoning": "..." }
+    {"taskId": "...", "taskTitle": "...", "start": "${date}T09:00:00.000", "end": "${date}T09:30:00.000", "estimatedMinutes": 30, "reasoning": "..."}
   ],
   "unscheduledTasks": [
-    { "taskId": "...", "taskTitle": "...", "reason": "..." }
+    {"taskId": "...", "taskTitle": "...", "reason": "..."}
   ],
   "recommendations": ["..."]
 }`;
@@ -195,7 +182,7 @@ Return JSON:
         ],
         response_format: { type: "json_object" },
         temperature: 0.2,
-        max_tokens: 1500
+        max_tokens: 800
       });
 
       const raw = resp.choices?.[0]?.message?.content ?? "";
@@ -318,8 +305,8 @@ Return JSON:
       const response = await openai.chat.completions.create({
         model: MODEL,
         messages,
-        temperature: 0.4,
-        max_tokens: 500
+        temperature: 1,
+        max_completion_tokens: 1000
       });
 
       return response.choices?.[0]?.message?.content || "I couldn't process your request.";
@@ -388,10 +375,10 @@ Return JSON:
       console.log('Date string:', dateStr);
 
       // Call each service individually with error handling
-      let meetings = [];
-      let freeBlocks = [];
-      let allTasks = [];
-      let suggestions = [];
+      let meetings: any[] = [];
+      let freeBlocks: any[] = [];
+      let allTasks: any[] = [];
+      let suggestions: any[] = [];
 
       try {
         meetings = await calendarService.getEventsForDate(dateStr);
@@ -465,8 +452,8 @@ Return JSON:
               JSON.stringify(summaryData, null, 2)
           }
         ],
-        temperature: 0.3,
-        max_tokens: 600
+        temperature: 1,
+        max_completion_tokens: 800
       });
 
       return response.choices?.[0]?.message?.content || "I couldn't generate your agenda summary.";
@@ -497,7 +484,7 @@ Return JSON:
           { role: "user", content: `Extract all tasks and action items from this text:\n\n${textContent}` }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.2,
+        temperature: 1,
         max_tokens: 1000
       });
 
