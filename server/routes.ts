@@ -327,6 +327,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/focus-blocks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteFocusBlock(id);
+      if (!deleted) {
+        res.status(404).json({ message: "Focus block not found" });
+        return;
+      }
+      res.json({ message: "Focus block deleted successfully" });
+    } catch (error) {
+      console.error("Delete focus block error:", error);
+      res.status(500).json({ message: "Failed to delete focus block" });
+    }
+  });
+
   // Delete focus blocks by task ID
   app.delete("/api/focus-blocks/task/:taskId", async (req, res) => {
     try {

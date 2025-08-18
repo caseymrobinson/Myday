@@ -98,7 +98,8 @@ export default function CalendarPanel({
       queryClient.invalidateQueries({ queryKey: ["/api/agenda"] });
       toast({ title: "Task removed from schedule" });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Failed to dismiss focus block:", error);
       toast({ title: "Failed to remove task", variant: "destructive" });
     },
   });
