@@ -27,7 +27,8 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
   const [editForm, setEditForm] = useState({
     title: "",
     priority: 2,
-    estimateMins: 30
+    estimateMins: 30,
+    dueAt: ""
   });
 
   // Remove date/time logic - now handled by CalendarPanel
@@ -59,10 +60,12 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
 
   const openEditDialog = (task: Task) => {
     setEditingTask(task);
+    const dueDate = task.dueAt ? new Date(task.dueAt).toISOString().split('T')[0] : "";
     setEditForm({
       title: task.title,
       priority: task.priority,
-      estimateMins: task.estimateMins || 30
+      estimateMins: task.estimateMins || 30,
+      dueAt: dueDate
     });
   };
 
@@ -71,7 +74,10 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
     
     updateTaskMutation.mutate({
       id: editingTask.id,
-      updates: editForm
+      updates: {
+        ...editForm,
+        dueAt: editForm.dueAt ? new Date(editForm.dueAt).toISOString() : null
+      }
     });
     setEditingTask(null);
   };
@@ -252,6 +258,16 @@ export default function TasksPanel({ tasks, isLoading, onAddTask, onSetupCalenda
                                       <SelectItem value="480">8 hours</SelectItem>
                                     </SelectContent>
                                   </Select>
+                                </div>
+                                <div>
+                                  <Label htmlFor="editDueDate" className="text-gray-300">Due Date (Optional)</Label>
+                                  <Input
+                                    id="editDueDate"
+                                    type="date"
+                                    value={editForm.dueAt}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, dueAt: e.target.value }))}
+                                    className="bg-gray-800 border-gray-700 text-white"
+                                  />
                                 </div>
                                 <div className="flex gap-3">
                                   <Button 

@@ -17,6 +17,7 @@ export default function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) 
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState("2");
   const [estimateMins, setEstimateMins] = useState("30");
+  const [dueDate, setDueDate] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -30,6 +31,7 @@ export default function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) 
       setTitle("");
       setPriority("2");
       setEstimateMins("30");
+      setDueDate("");
     },
     onError: () => {
       toast({ title: "Failed to create task", variant: "destructive" });
@@ -44,6 +46,7 @@ export default function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) 
       title,
       priority: parseInt(priority),
       estimateMins: parseInt(estimateMins),
+      dueAt: dueDate ? new Date(dueDate).toISOString() : null,
       source: 'manual',
       status: 'pending'
     });
@@ -106,6 +109,18 @@ export default function AddTaskModal({ open, onOpenChange }: AddTaskModalProps) 
                 <SelectItem value="480">8 hours</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="dueDate" className="text-gray-300">Due Date (Optional)</Label>
+            <Input
+              id="dueDate"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="bg-gray-800 border-gray-700 text-white"
+              data-testid="input-task-due-date"
+            />
           </div>
           
           <div className="flex justify-end gap-3">
