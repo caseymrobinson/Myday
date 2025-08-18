@@ -416,13 +416,13 @@ export default function CalendarPanel({
                     ${ev.color === "blue" ? "bg-blue-500/20 border-blue-500 text-blue-400" : ""}
                     ${ev.color === "green" ? "bg-green-500/20 border-green-500 text-green-400" : ""}
                     ${ev.color === "purple" ? "bg-[#5E00E1]/20 border-[#5E00E1] text-[#8C4CFF]" : ""}
-                    border-l-2 rounded px-2 py-1 h-full flex flex-col justify-between
+                    border-l-2 rounded px-2 py-1 h-full flex items-center justify-between
                   `}
                 >
-                  <p className="text-xs truncate">{ev.title}</p>
+                  <p className="text-xs truncate flex-1 pr-2">{ev.title}</p>
 
                   {ev.type === "focus" && ev.focusBlock && !ev.focusBlock.confirmed && (
-                    <div className="flex items-center gap-1 mt-1">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       <Button
                         size="sm"
                         variant="ghost"
