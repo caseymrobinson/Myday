@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import TasksPanel from "@/components/TasksPanel";
 import CalendarPanel from "@/components/CalendarPanel";
-import ChatPanel from "@/components/ChatPanel";
+import ChatPanel, { ChatPanelHandle } from "@/components/ChatPanel";
 import AddTaskModal from "@/components/AddTaskModal";
 import CalendarSetupModal from "@/components/CalendarSetupModal";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ export default function Dashboard() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showCalendarSetup, setShowCalendarSetup] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const chatPanelRef = useRef<ChatPanelHandle>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [tasksPanelWidth, setTasksPanelWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
@@ -44,10 +45,58 @@ export default function Dashboard() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
       queryClient.invalidateQueries({ queryKey: ['/api/focus-blocks'] });
-      if (result.focusBlocksCreated && result.focusBlocksCreated > 0) {
-        toast({ title: `Planned ${result.focusBlocksCreated} tasks into your schedule` });
-      } else {
-        toast({ title: "Day planning complete - check your calendar" });
+      
+      // Send AI response to chat panel
+      if (result.suggestions || result.recommendations) {
+        let aiMessage = "Here's your optimized day plan:\n\n";
+        
+        if (result.suggestions && result.suggestions.length > 0) {
+          aiMessage += "📅 **Scheduled Tasks:**\n";
+          result.suggestions.forEach((suggestion: any, index: number) => {
+            const startTime = new Date(suggestion.start).toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit',
+              hour12: true 
+            });
+            const endTime = new Date(suggestion.end).toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit',
+              hour12: true 
+            });
+            aiMessage += `${index + 1}. **${suggestion.taskTitle}** (${startTime} - ${endTime})\n`;
+            if (suggestion.reasoning) {
+              aiMessage += `   _${suggestion.reasoning}_\n`;
+            }
+          });
+        }
+        
+        if (result.unscheduledTasks && result.unscheduledTasks.length > 0) {
+          aiMessage += "\n⏸️ **Tasks that couldn't be scheduled:**\n";
+          result.unscheduledTasks.forEach((task: any, index: number) => {
+            aiMessage += `${index + 1}. ${task.taskTitle || task.title}\n`;
+            if (task.reason) {
+              aiMessage += `   _${task.reason}_\n`;
+            }
+          });
+        }
+        
+        if (result.recommendations && result.recommendations.length > 0) {
+          aiMessage += "\n💡 **Recommendations:**\n";
+          result.recommendations.forEach((rec: string, index: number) => {
+            aiMessage += `${index + 1}. ${rec}\n`;
+          });
+        }
+        
+        // Add message to chat panel
+        if (chatPanelRef.current) {
+          chatPanelRef.current.addMessage(aiMessage, false);
+        }
+        
+        if (result.focusBlocksCreated && result.focusBlocksCreated > 0) {
+          toast({ title: `Planned ${result.focusBlocksCreated} tasks into your schedule` });
+        } else {
+          toast({ title: "Day planning complete - check your calendar" });
+        }
       }
     },
     onError: () => {
@@ -57,6 +106,12 @@ export default function Dashboard() {
 
   const handlePlanDay = () => {
     const dateString = selectedDate.toISOString().split('T')[0];
+    
+    // Open the chat panel when planning the day
+    if (!showChat) {
+      setShowChat(true);
+    }
+    
     planDayMutation.mutate(dateString);
   };
 
@@ -146,7 +201,7 @@ export default function Dashboard() {
         {/* Chat Panel - Slide in from right */}
         {showChat && (
           <div className="w-[400px] flex-shrink-0">
-            <ChatPanel onClose={() => setShowChat(false)} />
+            <ChatPanel ref={chatPanelRef} onClose={() => setShowChat(false)} />
           </div>
         )}
       </div>

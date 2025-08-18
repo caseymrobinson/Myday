@@ -169,7 +169,7 @@ export class SchedulerService {
           if (slotDuration > durationMs) {
             // Slot has remaining time
             availableSlots[i] = {
-              start: new Date(suggestionEnd),
+              start: new Date(suggestedEnd),
               end: slot.end
             };
           } else {

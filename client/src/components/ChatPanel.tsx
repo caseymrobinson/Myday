@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useImperativeHandle, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -13,7 +13,11 @@ interface ChatPanelProps {
   onClose: () => void;
 }
 
-export default function ChatPanel({ onClose }: ChatPanelProps) {
+export interface ChatPanelHandle {
+  addMessage: (message: string, isUser?: boolean) => void;
+}
+
+const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onClose }, ref) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
@@ -22,6 +26,22 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
       isUser: false
     }
   ]);
+
+  // Function to add messages externally (e.g., from Plan My Day)
+  const addMessage = (message: string, isUser: boolean = false) => {
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      message,
+      timestamp: new Date(),
+      isUser
+    };
+    setMessages(prev => [...prev, newMessage]);
+  };
+
+  // Expose addMessage function to parent via ref
+  useImperativeHandle(ref, () => ({
+    addMessage
+  }));
   const [inputMessage, setInputMessage] = useState("");
   const { toast } = useToast();
 
@@ -202,4 +222,7 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
       </form>
     </div>
   );
-}
+});
+
+ChatPanel.displayName = 'ChatPanel';
+export default ChatPanel;
