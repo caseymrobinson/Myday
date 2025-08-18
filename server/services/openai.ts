@@ -250,7 +250,6 @@ Return STRICT JSON that matches the provided schema (no commentary).`;
             strict: true
           }
         },
-        temperature: 0.2,
         max_output_tokens: 1500
       });
 
@@ -347,7 +346,6 @@ Return STRICT JSON that matches the provided schema (no commentary).`;
         model: MODEL,
         input: input as any,
         max_output_tokens: 1000,
-        temperature: 1
       });
 
       return outputText(resp) || "I couldn't process your request.";
@@ -408,7 +406,6 @@ Return STRICT JSON that matches the provided schema (no commentary).`;
           { role: "user", content: [{ type: "input_text", text: "Based on this schedule data, provide a concise, conversational summary for today's agenda:\n\n" + JSON.stringify(summaryData, null, 2) }] }
         ],
         max_output_tokens: 800,
-        temperature: 1
       });
 
       return outputText(resp) || "I couldn't generate your agenda summary.";
@@ -445,7 +442,6 @@ Return STRICT JSON that matches the provided schema (no commentary).`;
             strict: true
           }
         },
-        temperature: 0.3,
         max_output_tokens: 1000
       });
 
