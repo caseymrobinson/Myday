@@ -133,9 +133,9 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
       
       // Only include timed events that occur on this day (all-day events handled separately)
       if (!event.isAllDay) {
-        // For timed events, check if they fall within the day range
-        const eventDateStr = eventStart.toDateString();
-        const currentDateStr = currentDate.toDateString();
+        // For timed events, compare date parts using ISO strings to avoid timezone issues
+        const eventDateStr = eventStart.toISOString().split('T')[0];
+        const currentDateStr = currentDate.toISOString().split('T')[0];
         
         if (eventDateStr === currentDateStr) {
           allEvents.push({
@@ -251,13 +251,23 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
   const allDayEvents = events?.filter(event => {
     if (!event.isAllDay) return false;
     
-    // For all-day events, compare just the date part to avoid timezone issues
+    // For all-day events, we need to account for timezone offset
+    // All-day events stored as UTC midnight should display on the local date
     const eventStart = new Date(event.start);
-    const eventDateStr = eventStart.toISOString().split('T')[0];
+    
+    // Convert the event start to local date string
+    const eventLocalDateStr = new Date(eventStart.getTime() + eventStart.getTimezoneOffset() * 60000).toISOString().split('T')[0];
     const currentDateStr = currentDate.toISOString().split('T')[0];
     
-    return eventDateStr === currentDateStr;
+    return eventLocalDateStr === currentDateStr;
   }) || [];
+
+  console.log('Final rendering data:', {
+    positionedEvents: positionedEvents.length,
+    positionedEventTitles: positionedEvents.map(e => e.title),
+    allDayEventsCount: allDayEvents.length,
+    allDayEventTitles: allDayEvents.map(e => e.title)
+  });
 
   // Get current hour for highlighting (only if viewing today)
   const now = new Date();
@@ -340,6 +350,11 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                 <div
                   key={event.id}
                   className="bg-indigo-500/20 border-l-2 border-indigo-500 rounded px-3 py-2 text-sm"
+                  style={{
+                    // Debug styles to make all-day events visible
+                    border: '2px solid green',
+                    backgroundColor: 'rgba(0, 255, 0, 0.3)'
+                  }}
                 >
                   <div className="text-indigo-300 font-medium">{event.title}</div>
                   {event.location && (
@@ -398,7 +413,10 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                   top: `${event.top + 16}px`, // +16px to account for hour label space
                   height: `${event.height - 8}px`, // -8px for padding
                   left: leftPosition,
-                  width: eventWidth
+                  width: eventWidth,
+                  // Debug styles to make events visible
+                  border: '2px solid red',
+                  backgroundColor: 'rgba(255, 0, 0, 0.2)'
                 }}
               >
                 <div 
