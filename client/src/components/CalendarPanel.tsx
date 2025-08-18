@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import type { CalendarEvent, FocusBlock } from "../types";
 import { Bot, ChevronLeft, ChevronRight, Send, Check, X, Calendar } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -50,8 +50,18 @@ export default function CalendarPanel({
   showChat,
 }: CalendarPanelProps) {
   const [chatInput, setChatInput] = useState("");
+  const [currentTime, setCurrentTime] = useState(new Date());
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Update current time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, []);
 
   const currentDate = selectedDate || new Date();
   const dateString = currentDate.toLocaleDateString("en-US", {
@@ -60,7 +70,7 @@ export default function CalendarPanel({
     month: "long",
     day: "numeric",
   });
-  const timeString = new Date().toLocaleTimeString("en-US", {
+  const timeString = currentTime.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
@@ -280,9 +290,8 @@ export default function CalendarPanel({
   }, [events, focusBlocks, dayStart, dayEnd]);
 
   // Current hour line
-  const now = new Date();
-  const isToday = currentDate.toDateString() === now.toDateString();
-  const currentHour = isToday ? now.getHours() : -1;
+  const isToday = currentDate.toDateString() === currentTime.toDateString();
+  const currentHour = isToday ? currentTime.getHours() : -1;
 
   return (
     <div className="flex flex-col h-full bg-black">

@@ -25,6 +25,12 @@ My Day is an AI-first daily planning assistant that combines calendar integratio
   - **Decline detection**: Events where user has PARTSTAT=DECLINED are automatically filtered out
   - **Database integration**: Calendar-v2.ts loads email from user_email setting for proper identification
   - **Improved calendar accuracy**: Only shows events user actually plans to attend
+- **✅ COMPLETED: Real-time Time Updates** - Fixed stale time display and calendar current hour line
+  - **Live time display**: Current time at top of interface updates every minute automatically
+  - **Dynamic current hour line**: Red line in calendar moves to current hour in real-time
+  - **Timer implementation**: Added useEffect with setInterval for 60-second updates
+  - **State management**: Uses React state to trigger re-renders when time changes
+  - **Better UX**: No more stale time information, always shows accurate current time
 
 ## Previous Changes (Aug 17, 2025)
 - **✅ COMPLETED: Advanced Calendar Service Optimization** - User refined calendar-v2.ts with significant performance improvements
