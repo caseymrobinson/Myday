@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import type { CalendarEvent, FocusBlock } from "../types";
 import { Bot, ChevronLeft, ChevronRight, Send, Check, X, Calendar } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -20,39 +20,49 @@ interface CalendarPanelProps {
   onDismissFocusBlock?: (blockId: string) => void;
 }
 
-export default function CalendarPanel({ events, focusBlocks, onOpenChat, selectedDate, onDateChange, showChat, onConfirmFocusBlock, onDismissFocusBlock }: CalendarPanelProps) {
+// visual constants
+const HOUR_HEIGHT_PX = 64;          // each hour row height
+const MIN_EVENT_HEIGHT_PX = 32;     // min block size so tiny meetings are clickable
+const LEFT_GUTTER_PX = 68;          // space for time labels
+const COLUMN_GAP_PX = 4;            // small gap between overlapping columns
+const TOP_LABEL_OFFSET_PX = 16;     // offset for hour label positioning
+
+export default function CalendarPanel({
+  events,
+  focusBlocks,
+  onOpenChat,
+  selectedDate,
+  onDateChange,
+  showChat,
+}: CalendarPanelProps) {
   const [chatInput, setChatInput] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-
-
-  // Get current date and time for header
   const currentDate = selectedDate || new Date();
-  const dateString = currentDate.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  const dateString = currentDate.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
-  const timeString = new Date().toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
+  const timeString = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
 
   const sendMessageMutation = useMutation({
-    mutationFn: ({ message, history }: { message: string; history: Array<{role: string, content: string}> }) => 
+    mutationFn: ({ message, history }: { message: string; history: Array<{ role: string; content: string }> }) =>
       api.sendMessage(message, history || []),
     onSuccess: () => {
       setChatInput("");
       toast({ title: "Message sent to AI assistant" });
-      // Optionally open chat panel to show response
       onOpenChat();
     },
     onError: () => {
       toast({ title: "Failed to send message", variant: "destructive" });
-    }
+    },
   });
 
   const handleQuickMessage = (message: string) => {
@@ -69,24 +79,24 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
   const confirmFocusBlockMutation = useMutation({
     mutationFn: (blockId: string) => api.updateFocusBlock(blockId, { confirmed: true }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/focus-blocks'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/focus-blocks"] });
       toast({ title: "Task confirmed in schedule" });
     },
     onError: () => {
       toast({ title: "Failed to confirm task", variant: "destructive" });
-    }
+    },
   });
 
   const dismissFocusBlockMutation = useMutation({
     mutationFn: (blockId: string) => api.deleteFocusBlock(blockId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/focus-blocks'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/agenda'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/focus-blocks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agenda"] });
       toast({ title: "Task removed from schedule" });
     },
     onError: () => {
       toast({ title: "Failed to remove task", variant: "destructive" });
-    }
+    },
   });
 
   const handleConfirmFocusBlock = (blockId: string) => {
@@ -98,174 +108,190 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
   };
 
   // Generate hour slots for the day
-  const hours = Array.from({ length: 24 }, (_, i) => {
-    const hour = i;
-    const period = hour < 12 ? 'am' : 'pm';
-    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    return {
-      hour24: hour,
-      label: `${displayHour} ${period}`,
-      time: new Date().setHours(hour, 0, 0, 0)
-    };
-  });
+  const hours = useMemo(() => {
+    return Array.from({ length: 24 }, (_, i) => {
+      const hour = i;
+      const period = hour < 12 ? "am" : "pm";
+      const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+      return {
+        hour24: hour,
+        label: `${displayHour} ${period}`,
+      };
+    });
+  }, []);
 
-  // Calculate positioned events for the entire day
-  const calculateEventPositions = () => {
+  // Calculate positioned events for the entire day with proper overlap handling
+  const positionedEvents = useMemo(() => {
     const dayStart = new Date(currentDate);
-    dayStart.setHours(0, 0, 0, 0); // Use local time, not UTC
+    dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(currentDate);
     dayEnd.setHours(23, 59, 59, 999);
 
-    const allEvents: Array<{
+    type FlatEvent = {
       id: string;
       title: string;
       start: Date;
       end: Date;
-      color: string;
-      type: 'calendar' | 'focus';
+      color: "blue" | "green" | "purple";
+      type: "calendar" | "focus";
       focusBlock?: FocusBlock;
-    }> = [];
+    };
 
-    // Process calendar events (exclude all-day events from timeline)
-    events?.forEach(event => {
-      const eventStart = new Date(event.start);
-      const eventEnd = new Date(event.end);
-      
-      // Only include timed events that occur on this day (all-day events handled separately)
-      if (!event.isAllDay && eventStart >= dayStart && eventStart <= dayEnd) {
-        allEvents.push({
+    const all: FlatEvent[] = [];
+
+    // Calendar events: include timed events on this day
+    events?.forEach((event) => {
+      const s = new Date(event.start);
+      const e = new Date(event.end);
+      if (!event.isAllDay && s >= dayStart && s <= dayEnd) {
+        all.push({
           id: event.id,
           title: event.title,
-          start: eventStart,
-          end: eventEnd,
-          color: 'blue',
-          type: 'calendar'
+          start: s,
+          end: e,
+          color: "blue",
+          type: "calendar",
         });
       }
     });
 
-    // Process focus blocks
-    focusBlocks?.forEach(block => {
-      const blockStart = new Date(block.start);
-      const blockEnd = new Date(block.end);
-      
-      // Only include blocks that occur on this day (using local time)
-      if (blockStart >= dayStart && blockStart <= dayEnd) {
-        allEvents.push({
+    // Focus blocks on this day
+    focusBlocks?.forEach((block) => {
+      const s = new Date(block.start);
+      const e = new Date(block.end);
+      if (s >= dayStart && s <= dayEnd) {
+        all.push({
           id: block.id,
-          title: 'Task Block',
-          start: blockStart,
-          end: blockEnd,
-          color: block.confirmed ? 'green' : 'purple',
-          type: 'focus',
-          focusBlock: block // Add full block data for actions
+          title: "Task Block",
+          start: s,
+          end: e,
+          color: block.confirmed ? "green" : "purple",
+          type: "focus",
+          focusBlock: block,
         });
       }
     });
 
-    // Sort events by start time
-    allEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+    // Sort by start time, then by end time
+    all.sort((a, b) => {
+      const d = a.start.getTime() - b.start.getTime();
+      return d !== 0 ? d : a.end.getTime() - b.end.getTime();
+    });
 
-    // Detect overlapping events and assign columns
-    const positionedEvents: Array<{
+    type Positioned = {
       id: string;
       title: string;
       top: number;
       height: number;
-      color: string;
-      type: 'calendar' | 'focus';
+      color: "blue" | "green" | "purple";
+      type: "calendar" | "focus";
       column: number;
       totalColumns: number;
       focusBlock?: FocusBlock;
-    }> = [];
+      start: Date;
+      end: Date;
+    };
 
-    const columns: Array<{ endTime: Date; events: any[] }> = [];
+    const positioned: Positioned[] = [];
 
-    allEvents.forEach(event => {
-      // Find a column where this event doesn't overlap
-      let assignedColumn = -1;
-      for (let i = 0; i < columns.length; i++) {
-        if (event.start >= columns[i].endTime) {
-          assignedColumn = i;
-          break;
+    // Sweep-line layout with per-cluster column counts
+    const active: Positioned[] = [];
+    const freeCols: number[] = []; // pool of reusable column indices
+    let nextCol = 0;
+
+    const releaseEnded = (now: Date) => {
+      for (let i = active.length - 1; i >= 0; i--) {
+        if (active[i].end.getTime() <= now.getTime()) {
+          freeCols.push(active[i].column);
+          active.splice(i, 1);
         }
       }
+      freeCols.sort((a, b) => a - b);
+    };
 
-      // If no column available, create a new one
-      if (assignedColumn === -1) {
-        assignedColumn = columns.length;
-        columns.push({ endTime: event.end, events: [] });
+    for (const ev of all) {
+      // free columns that ended before this event starts
+      releaseEnded(ev.start);
+
+      // assign smallest available column, or a new one
+      let col: number;
+      if (freeCols.length) {
+        col = freeCols.shift()!;
       } else {
-        columns[assignedColumn].endTime = new Date(Math.max(columns[assignedColumn].endTime.getTime(), event.end.getTime()));
+        col = nextCol++;
       }
 
-      columns[assignedColumn].events.push(event);
+      // compute top and height
+      const startHour = ev.start.getHours();
+      const startMinutes = ev.start.getMinutes();
+      const endHour = ev.end.getHours();
+      const endMinutes = ev.end.getMinutes();
 
-      // Calculate position and height using local time
-      const startHour = event.start.getHours();
-      const startMinutes = event.start.getMinutes();
-      const endHour = event.end.getHours();
-      const endMinutes = event.end.getMinutes();
-      
-      // Calculate position and height
-      const top = (startHour * 64) + (startMinutes / 60 * 64); // 64px per hour
-      const durationHours = (endHour - startHour) + (endMinutes - startMinutes) / 60;
-      const height = Math.max(durationHours * 64, 32); // Minimum 32px height
+      const top =
+        startHour * HOUR_HEIGHT_PX + (startMinutes / 60) * HOUR_HEIGHT_PX;
+      const durationHours =
+        endHour - startHour + (endMinutes - startMinutes) / 60;
+      const height = Math.max(durationHours * HOUR_HEIGHT_PX, MIN_EVENT_HEIGHT_PX);
 
-      positionedEvents.push({
-        id: event.id,
-        title: event.title,
+      const p: Positioned = {
+        id: ev.id,
+        title: ev.title,
         top,
         height,
-        color: event.color,
-        type: event.type,
-        column: assignedColumn,
-        totalColumns: 0, // Will be set below
-        focusBlock: event.focusBlock
-      });
-    });
+        color: ev.color,
+        type: ev.type,
+        column: col,
+        totalColumns: 1, // will be updated by cluster size
+        focusBlock: ev.focusBlock,
+        start: ev.start,
+        end: ev.end,
+      };
 
-    // Update totalColumns for all events
-    const maxColumns = columns.length;
-    positionedEvents.forEach(event => {
-      event.totalColumns = maxColumns;
-    });
+      active.push(p);
+      positioned.push(p);
 
-    return positionedEvents;
-  };
+      // update cluster width: every active event should share the same max columns
+      const clusterCols = active.length;
+      for (const a of active) {
+        if (a.totalColumns < clusterCols) a.totalColumns = clusterCols;
+      }
+    }
 
-  const positionedEvents = calculateEventPositions();
+    // done; any remaining active doesn't matter for counts anymore
 
-  // Get all-day events for this day
+    return positioned;
+  }, [events, focusBlocks, currentDate]);
+
+  // All-Day events for this day
   const dayStart = new Date(currentDate);
   dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(currentDate);
   dayEnd.setHours(23, 59, 59, 999);
-  
-  const allDayEvents = events?.filter(event => {
-    const eventStart = new Date(event.start);
-    const eventEnd = new Date(event.end);
-    return event.isAllDay && eventStart >= dayStart && eventStart <= dayEnd;
-  }) || [];
 
-  // Get current hour for highlighting (only if viewing today)
+  const allDayEvents =
+    events?.filter((event) => {
+      const s = new Date(event.start);
+      return event.isAllDay && s >= dayStart && s <= dayEnd;
+    }) || [];
+
+  // Current hour line if viewing today
   const now = new Date();
   const isToday = currentDate.toDateString() === now.toDateString();
   const currentHour = isToday ? now.getHours() : -1;
 
   return (
     <div className="flex flex-col h-full bg-black">
-      {/* Header with Date/Time */}
+      {/* Header */}
       <div className="flex items-center justify-between px-6 pt-4 pb-0 bg-[#1e1e1e]">
         <div className="flex items-center gap-2 text-gray-400 text-sm">
           <span className="text-white text-xl font-semibold">{dateString}</span>
           <span className="text-gray-600">•</span>
           <span>{timeString}</span>
         </div>
-        
+
         <div className="flex items-center gap-2">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="icon"
             onClick={() => {
               const newDate = new Date(currentDate);
@@ -276,14 +302,14 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button 
+          <Button
             onClick={() => onDateChange(new Date())}
             className="hover:bg-primary/90 text-white bg-[#5E00E1]"
           >
             Today
           </Button>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="icon"
             onClick={() => {
               const newDate = new Date(currentDate);
@@ -296,6 +322,7 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           </Button>
         </div>
       </div>
+
       {/* Legend */}
       <div className="px-6 py-4 bg-[#1e1e1e] pt-[4px] pb-[16px]">
         <div className="flex items-center justify-between">
@@ -315,8 +342,8 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           </div>
         </div>
       </div>
-      
-      {/* All-Day Events Sticky Header */}
+
+      {/* All-Day Events */}
       {allDayEvents.length > 0 && (
         <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
           <div className="px-6 py-3">
@@ -340,18 +367,18 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           </div>
         </div>
       )}
-      
+
       {/* Calendar Grid */}
       <ScrollArea className="flex-1 bg-black">
         <div className="px-6 relative">
-          {/* Hour grid background */}
+          {/* Hour grid */}
           {hours.map((hour) => {
             const isCurrentHour = hour.hour24 === currentHour;
-            
+
             return (
-              <div 
-                key={hour.hour24} 
-                className={`relative h-16 ${isCurrentHour ? 'bg-gray-900/50' : 'hover:bg-gray-950/50'}`}
+              <div
+                key={hour.hour24}
+                className={`relative h-16 ${isCurrentHour ? "bg-gray-900/50" : "hover:bg-gray-950/50"}`}
               >
                 {/* Hour label */}
                 <span className="absolute -top-2 left-0 text-xs text-gray-600 z-10">
@@ -371,37 +398,37 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
 
           {/* Positioned events overlay */}
           {positionedEvents.map((event) => {
-            const leftOffset = 32; // Space for time labels
-            const eventWidth = event.totalColumns > 1 ? 
-              `calc((100% - ${leftOffset}px) / ${event.totalColumns})` : 
-              `calc(100% - ${leftOffset}px)`;
-            const leftPosition = event.totalColumns > 1 ? 
-              `${leftOffset + (event.column * ((100 - leftOffset) / event.totalColumns))}%` : 
-              `${leftOffset}px`;
+            // width calc with per-cluster columns and a small gap
+            const widthCalc =
+              `calc(( (100% - ${LEFT_GUTTER_PX}px) - ${COLUMN_GAP_PX}px * (${event.totalColumns - 1}) ) / ${event.totalColumns})`;
+
+            // left calc: gutter + column index * (colWidth + gap)
+            const leftCalc =
+              `calc(${LEFT_GUTTER_PX}px + ${event.column} * ( ( (100% - ${LEFT_GUTTER_PX}px) - ${COLUMN_GAP_PX}px * (${event.totalColumns - 1}) ) / ${event.totalColumns} + ${COLUMN_GAP_PX}px ))`;
 
             return (
               <div
                 key={event.id}
                 className="absolute z-20 pr-2"
                 style={{
-                  top: `${event.top + 16}px`, // +16px to account for hour label space
-                  height: `${event.height - 8}px`, // -8px for padding
-                  left: leftPosition,
-                  width: eventWidth
+                  top: `${event.top + TOP_LABEL_OFFSET_PX}px`,
+                  height: `${event.height - 8}px`,
+                  left: leftCalc,
+                  width: widthCalc,
                 }}
               >
-                <div 
+                <div
                   className={`
-                    ${event.color === 'blue' ? 'bg-blue-500/20 border-blue-500 text-blue-400' : ''}
-                    ${event.color === 'green' ? 'bg-green-500/20 border-green-500 text-green-400' : ''}
-                    ${event.color === 'purple' ? 'bg-[#5E00E1]/20 border-[#5E00E1] text-[#8C4CFF]' : ''}
+                    ${event.color === "blue" ? "bg-blue-500/20 border-blue-500 text-blue-400" : ""}
+                    ${event.color === "green" ? "bg-green-500/20 border-green-500 text-green-400" : ""}
+                    ${event.color === "purple" ? "bg-[#5E00E1]/20 border-[#5E00E1] text-[#8C4CFF]" : ""}
                     border-l-2 rounded px-2 py-1 h-full flex flex-col justify-between
                   `}
                 >
                   <p className="text-xs truncate">{event.title}</p>
-                  
+
                   {/* Focus block controls */}
-                  {event.type === 'focus' && event.focusBlock && !event.focusBlock.confirmed && (
+                  {event.type === "focus" && event.focusBlock && !event.focusBlock.confirmed && (
                     <div className="flex items-center gap-1 mt-1">
                       <Button
                         size="sm"
@@ -433,13 +460,13 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
           })}
         </div>
       </ScrollArea>
-      {/* Interactive Chat Bubble - Only show when chat panel is closed */}
+
+      {/* Chat bubble */}
       {!showChat && (
         <div className="p-4 bg-gray-950 flex justify-center">
           <div className="rounded-2xl p-4 relative max-w-[620px] w-full bg-[#1e1e1e]">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                {/* Interactive Input */}
                 <form onSubmit={handleChatSubmit} className="relative mb-3">
                   <Input
                     value={chatInput}
@@ -458,11 +485,10 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                     <Send className="h-3 w-3" />
                   </Button>
                 </form>
-                
-                {/* Quick Action Buttons */}
+
                 <div className="flex gap-2 overflow-hidden">
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="secondary"
                     onClick={() => handleQuickMessage("I need to create a task")}
                     disabled={sendMessageMutation.isPending}
@@ -471,8 +497,8 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                   >
                     Create task
                   </Button>
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="secondary"
                     onClick={() => handleQuickMessage("When is my next meeting?")}
                     disabled={sendMessageMutation.isPending}
@@ -481,8 +507,8 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                   >
                     Next meeting
                   </Button>
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="secondary"
                     onClick={() => handleQuickMessage("Book focus time for me")}
                     disabled={sendMessageMutation.isPending}
@@ -491,8 +517,8 @@ export default function CalendarPanel({ events, focusBlocks, onOpenChat, selecte
                   >
                     Book focus time
                   </Button>
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="secondary"
                     onClick={() => handleQuickMessage("Help me prioritize my tasks")}
                     disabled={sendMessageMutation.isPending}

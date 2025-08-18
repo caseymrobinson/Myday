@@ -29,8 +29,8 @@ export class CalendarServiceV2 {
   private cronJob: cron.ScheduledTask | null = null;
 
   // Range config
-  private readonly pastMonths = 18;
-  private readonly futureMonths = 3;
+  private readonly pastMonths = 0;  // Start from current day
+  private readonly futureMonths = 12;  // Extended future range to compensate
 
   // Padding around month slices to avoid TZ/DST clipping
   private readonly PAD_HOURS = 36;
