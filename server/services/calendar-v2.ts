@@ -663,20 +663,34 @@ export class CalendarServiceV2 {
   async getEventsForDate(date: string): Promise<any[]> {
     const events = await storage.getCalendarEvents();
     const targetDate = new Date(date);
+    
+    // Create local day boundaries for the target date
+    const dayStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+    const dayEnd = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
 
     return events
       .filter((e) => {
         const eventStart = new Date(e.start);
-        // All-day: match by local date string to avoid tz shift
+        const eventEnd = new Date(e.end);
+        
         if (e.isAllDay || (e as any).is_all_day) {
-          const eventDateStr = new Date(
-            eventStart.getUTCFullYear(),
-            eventStart.getUTCMonth(),
-            eventStart.getUTCDate()
-          ).toDateString();
-          return eventDateStr === targetDate.toDateString();
+          // For all-day events, extract the local date from the start time
+          // All-day events are typically stored as local midnight, so use local date extraction
+          const eventLocalDate = new Date(
+            eventStart.getFullYear(),
+            eventStart.getMonth(), 
+            eventStart.getDate()
+          );
+          const targetLocalDate = new Date(
+            targetDate.getFullYear(),
+            targetDate.getMonth(),
+            targetDate.getDate()
+          );
+          return eventLocalDate.getTime() === targetLocalDate.getTime();
         }
-        return eventStart.toDateString() === targetDate.toDateString();
+        
+        // For regular events, check if they overlap with the target day's local time range
+        return eventStart < dayEnd && eventEnd > dayStart;
       })
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
       .map((e) => ({
