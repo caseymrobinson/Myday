@@ -37,15 +37,11 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
   });
 
   useEffect(() => {
-    if (existingUrl?.url) {
-      setCalendarUrl(existingUrl.url);
-    }
+    if (existingUrl?.url) setCalendarUrl(existingUrl.url);
   }, [existingUrl]);
 
   useEffect(() => {
-    if (existingEmail?.email) {
-      setUserEmail(existingEmail.email);
-    }
+    if (existingEmail?.email) setUserEmail(existingEmail.email);
   }, [existingEmail]);
 
   const setCalendarMutation = useMutation({
@@ -57,10 +53,10 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
       onOpenChange(false);
     },
     onError: () => {
-      toast({ 
-        title: "Failed to connect calendar", 
+      toast({
+        title: "Failed to connect calendar",
         description: "Please check your URL and try again",
-        variant: "destructive" 
+        variant: "destructive"
       });
     }
   });
@@ -74,9 +70,9 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
       toast({ title: "Calendar removed successfully" });
     },
     onError: () => {
-      toast({ 
+      toast({
         title: "Failed to remove calendar",
-        variant: "destructive" 
+        variant: "destructive"
       });
     }
   });
@@ -88,9 +84,9 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
       toast({ title: "Calendar events cleared successfully" });
     },
     onError: () => {
-      toast({ 
+      toast({
         title: "Failed to clear calendar events",
-        variant: "destructive" 
+        variant: "destructive"
       });
     }
   });
@@ -102,9 +98,9 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
       toast({ title: "Calendar synced successfully" });
     },
     onError: () => {
-      toast({ 
+      toast({
         title: "Failed to sync calendar",
-        variant: "destructive" 
+        variant: "destructive"
       });
     }
   });
@@ -116,10 +112,10 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
       toast({ title: "Email saved successfully" });
     },
     onError: () => {
-      toast({ 
-        title: "Failed to save email", 
+      toast({
+        title: "Failed to save email",
         description: "Please check your email format and try again",
-        variant: "destructive" 
+        variant: "destructive"
       });
     }
   });
@@ -135,13 +131,15 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
     setEmailMutation.mutate(userEmail);
   };
 
-  const isValidUrl = calendarUrl.includes('calendar.google.com/calendar/ical') || 
-                     calendarUrl.includes('.ics');
+  const isValidUrl =
+    calendarUrl.includes("calendar.google.com/calendar/ical") || calendarUrl.includes(".ics");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md max-h-[80vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      {/* Key bits: p-0, overflow-hidden, flex/col, min-h-0, and a fixed/max height */}
+      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md w-full max-h-[80vh] p-0 overflow-hidden flex flex-col min-h-0">
+        {/* Non-scrolling header */}
+        <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-2">
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-purple-500" />
             Connect Your Calendar
@@ -151,159 +149,175 @@ export default function CalendarSetupModal({ open, onOpenChange }: CalendarSetup
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-2">{/* Scrollable content */}
-
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="user-email" className="text-gray-300">
-              Your Email
-            </Label>
-            <Input
-              id="user-email"
-              type="email"
-              value={userEmail}
-              onChange={(e) => setUserEmail(e.target.value)}
-              placeholder="your.email@example.com"
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
-              data-testid="input-user-email"
-            />
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                onClick={handleEmailSave}
-                disabled={setEmailMutation.isPending || !userEmail.trim()}
-                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 text-sm"
-                data-testid="button-save-email"
-              >
-                {setEmailMutation.isPending ? "Saving..." : "Save Email"}
-              </Button>
-            </div>
-          </div>
-          
-          <div className="border-t border-gray-700 pt-4">
-            <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Scrollable body */}
+        <div className="flex-1 min-h-0">
+          <ScrollArea className="h-full">
+            <div className="px-6 pb-6 space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="calendar-url" className="text-gray-300">
-                  iCal URL
+                <Label htmlFor="user-email" className="text-gray-300">
+                  Your Email
                 </Label>
                 <Input
-                  id="calendar-url"
-                  type="url"
-                  value={calendarUrl}
-                  onChange={(e) => setCalendarUrl(e.target.value)}
-                  placeholder="https://calendar.google.com/calendar/ical/..."
+                  id="user-email"
+                  type="email"
+                  value={userEmail}
+                  onChange={(e) => setUserEmail(e.target.value)}
+                  placeholder="your.email@example.com"
                   className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
-                  data-testid="input-calendar-url"
+                  data-testid="input-user-email"
                 />
-                {calendarUrl && !isValidUrl && (
-                  <p className="text-xs text-yellow-500">
-                    This doesn't look like a valid Google Calendar iCal URL
-                  </p>
-            )}
-            {existingUrl?.url && (
-              <p className="text-xs text-green-500 flex items-center gap-1">
-                <Check className="h-3 w-3" />
-                Calendar already connected
-              </p>
-            )}
-          </div>
-
-          <Alert className="bg-gray-800 border-gray-700">
-            <AlertCircle className="h-4 w-4 text-blue-400" />
-            <AlertDescription className="text-gray-300 text-sm">
-              <div className="space-y-2">
-                <p className="font-medium">How to get your iCal URL:</p>
-                <ol className="list-decimal list-inside space-y-1 text-xs">
-                  <li>Open Google Calendar</li>
-                  <li>Click the gear icon → Settings</li>
-                  <li>Select your calendar from the left sidebar</li>
-                  <li>Scroll to "Integrate calendar"</li>
-                  <li>Copy the "Secret address in iCal format"</li>
-                </ol>
-              </div>
-            </AlertDescription>
-          </Alert>
-
-          <div className="flex justify-end gap-3">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => onOpenChange(false)}
-              className="border-gray-700 text-gray-300 hover:bg-gray-800"
-            >
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={!calendarUrl.trim() || setCalendarMutation.isPending}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {setCalendarMutation.isPending ? "Connecting..." : 
-               existingUrl?.url ? "Update Calendar" : "Connect Calendar"}
-            </Button>
-          </div>
-        </form>
-        </div>
-
-        {existingUrl?.url && (
-          <>
-            <Separator className="bg-gray-700" />
-            
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-3">Calendar Management</h4>
-                <div className="grid grid-cols-1 gap-2">
+                <div className="flex justify-end">
                   <Button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => syncCalendarMutation.mutate()}
-                    disabled={syncCalendarMutation.isPending}
-                    className="border-gray-700 text-gray-300 hover:bg-gray-800 justify-start"
+                    onClick={handleEmailSave}
+                    disabled={setEmailMutation.isPending || !userEmail.trim()}
+                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 text-sm"
+                    data-testid="button-save-email"
                   >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${syncCalendarMutation.isPending ? 'animate-spin' : ''}`} />
-                    {syncCalendarMutation.isPending ? "Syncing..." : "Force Sync"}
-                  </Button>
-                  
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => clearEventsMutation.mutate()}
-                    disabled={clearEventsMutation.isPending}
-                    className="border-gray-700 text-gray-300 hover:bg-gray-800 justify-start"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    {clearEventsMutation.isPending ? "Clearing..." : "Clear Events Only"}
-                  </Button>
-                  
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => removeCalendarMutation.mutate()}
-                    disabled={removeCalendarMutation.isPending}
-                    className="border-red-600 text-red-400 hover:bg-red-900/20 justify-start"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    {removeCalendarMutation.isPending ? "Removing..." : "Remove Calendar"}
+                    {setEmailMutation.isPending ? "Saving..." : "Save Email"}
                   </Button>
                 </div>
               </div>
-              
-              <Alert className="bg-gray-800 border-gray-700">
-                <AlertCircle className="h-4 w-4 text-yellow-400" />
-                <AlertDescription className="text-gray-300 text-xs">
-                  <strong>Force Sync:</strong> Manually refresh calendar events<br/>
-                  <strong>Clear Events:</strong> Remove all events but keep calendar connected<br/>
-                  <strong>Remove Calendar:</strong> Disconnect calendar and clear all events
-                </AlertDescription>
-              </Alert>
+
+              <div className="border-t border-gray-700 pt-4">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="calendar-url" className="text-gray-300">
+                      iCal URL
+                    </Label>
+                    <Input
+                      id="calendar-url"
+                      type="url"
+                      value={calendarUrl}
+                      onChange={(e) => setCalendarUrl(e.target.value)}
+                      placeholder="https://calendar.google.com/calendar/ical/..."
+                      className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+                      data-testid="input-calendar-url"
+                    />
+                    {calendarUrl && !isValidUrl && (
+                      <p className="text-xs text-yellow-500">
+                        This doesn't look like a valid Google Calendar iCal URL
+                      </p>
+                    )}
+                    {existingUrl?.url && (
+                      <p className="text-xs text-green-500 flex items-center gap-1">
+                        <Check className="h-3 w-3" />
+                        Calendar already connected
+                      </p>
+                    )}
+                  </div>
+
+                  <Alert className="bg-gray-800 border-gray-700">
+                    <AlertCircle className="h-4 w-4 text-blue-400" />
+                    <AlertDescription className="text-gray-300 text-sm">
+                      <div className="space-y-2">
+                        <p className="font-medium">How to get your iCal URL:</p>
+                        <ol className="list-decimal list-inside space-y-1 text-xs">
+                          <li>Open Google Calendar</li>
+                          <li>Click the gear icon → Settings</li>
+                          <li>Select your calendar from the left sidebar</li>
+                          <li>Scroll to "Integrate calendar"</li>
+                          <li>Copy the "Secret address in iCal format"</li>
+                        </ol>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => onOpenChange(false)}
+                      className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={!calendarUrl.trim() || setCalendarMutation.isPending}
+                      className="bg-primary hover:bg-primary/90"
+                    >
+                      {setCalendarMutation.isPending
+                        ? "Connecting..."
+                        : existingUrl?.url
+                        ? "Update Calendar"
+                        : "Connect Calendar"}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+
+              {existingUrl?.url && (
+                <>
+                  <Separator className="bg-gray-700" />
+
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-300 mb-3">
+                        Calendar Management
+                      </h4>
+                      <div className="grid grid-cols-1 gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => syncCalendarMutation.mutate()}
+                          disabled={syncCalendarMutation.isPending}
+                          className="border-gray-700 text-gray-300 hover:bg-gray-800 justify-start"
+                          data-testid="button-manual-sync"
+                        >
+                          <RefreshCw
+                            className={`h-4 w-4 mr-2 ${
+                              syncCalendarMutation.isPending ? "animate-spin" : ""
+                            }`}
+                          />
+                          {syncCalendarMutation.isPending ? "Syncing..." : "Manual Sync"}
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => clearEventsMutation.mutate()}
+                          disabled={clearEventsMutation.isPending}
+                          className="border-gray-700 text-gray-300 hover:bg-gray-800 justify-start"
+                          data-testid="button-clear-events"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          {clearEventsMutation.isPending ? "Clearing..." : "Clear All Events"}
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => removeCalendarMutation.mutate()}
+                          disabled={removeCalendarMutation.isPending}
+                          className="border-red-600 text-red-400 hover:bg-red-900/20 justify-start"
+                          data-testid="button-remove-calendar"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          {removeCalendarMutation.isPending ? "Removing..." : "Remove Calendar"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Alert className="bg-gray-800 border-gray-700">
+                      <AlertCircle className="h-4 w-4 text-yellow-400" />
+                      <AlertDescription className="text-gray-300 text-xs">
+                        <strong>Manual Sync:</strong> Force refresh calendar events now
+                        <br />
+                        <strong>Clear All Events:</strong> Remove all events but keep calendar connected
+                        <br />
+                        <strong>Remove Calendar:</strong> Disconnect calendar and clear all events
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                </>
+              )}
             </div>
-          </>
-        )}
+          </ScrollArea>
         </div>
-        </ScrollArea>{/* End scrollable content */}
       </DialogContent>
     </Dialog>
   );
